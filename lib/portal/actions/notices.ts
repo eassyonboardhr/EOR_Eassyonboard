@@ -41,6 +41,63 @@ async function resolveNoticeRecipients(audience: string, senderEmployerId: strin
   return (data ?? []).map((row) => row.id);
 }
 
+async function resolveTargetedNotice(
+  targetType: string,
+  targetId: string,
+  senderEmployerId: string | null,
+  isAdmin: boolean,
+) {
+  const supabase = getSupabaseAdmin();
+
+  if (targetType === "employee") {
+    const scopedEmployerId = senderEmployerId;
+    if (!isAdmin && !senderEmployerId) {
+      throw new Error("Your employer account is not linked yet.");
+    }
+
+    let query = supabase
+      .from("employees")
+      .select("id, employer_id, portal_user_id, full_name")
+      .eq("id", targetId)
+      .not("portal_user_id", "is", null);
+
+    if (!isAdmin) {
+      query = query.eq("employer_id", scopedEmployerId as string);
+    }
+
+    const { data: employee, error } = await query.single();
+
+    if (error || !employee?.portal_user_id) {
+      throw new Error("Employee recipient is not available.");
+    }
+
+    return {
+      employerId: employee.employer_id,
+      recipientIds: [employee.portal_user_id],
+      auditTarget: "employee",
+    };
+  }
+
+  if (targetType === "employer" && isAdmin) {
+    const { data: recipients, error } = await supabase
+      .from("portal_users")
+      .select("id")
+      .eq("role", "employer_admin")
+      .eq("status", "active")
+      .eq("employer_id", targetId);
+
+    if (error) throw new Error(error.message);
+
+    return {
+      employerId: targetId,
+      recipientIds: (recipients ?? []).map((recipient) => recipient.id),
+      auditTarget: "employer",
+    };
+  }
+
+  throw new Error("You cannot send notices to that recipient.");
+}
+
 export async function sendNoticeAction(formData: FormData) {
   const session = await getPortalSession();
   ensureActivePortalSession(session);
@@ -87,6 +144,65 @@ export async function sendNoticeAction(formData: FormData) {
     recipient_count: recipientIds.length,
   });
 
+  revalidatePath("/dashboard/admin");
+  revalidatePath("/dashboard/employer");
+  revalidatePath("/dashboard/employee");
+}
+
+export async function sendTargetedNoticeAction(formData: FormData) {
+  const session = await getPortalSession();
+  ensureActivePortalSession(session);
+
+  const isAdmin = isPlatformAdmin(session.user.role);
+  if (!isAdmin && session.user.role !== "employer_admin") {
+    throw new Error("You cannot send notices.");
+  }
+
+  const targetType = requireString(formData, "target_type");
+  const targetId = requireString(formData, "target_id");
+  const target = await resolveTargetedNotice(
+    targetType,
+    targetId,
+    session.user.employer_id,
+    isAdmin,
+  );
+
+  if (target.recipientIds.length === 0) {
+    throw new Error("No active recipient is linked to this node.");
+  }
+
+  const supabase = getSupabaseAdmin();
+  const { data: notice, error } = await supabase
+    .from("notices")
+    .insert({
+      sender_id: session.user.id,
+      employer_id: target.employerId,
+      title: requireString(formData, "title"),
+      body: requireString(formData, "body"),
+      priority: noticePriority(formData),
+      requires_acknowledgement: booleanValue(formData, "requires_acknowledgement"),
+    })
+    .select("id")
+    .single();
+
+  if (error || !notice) {
+    throw new Error(error?.message ?? "Could not send notice.");
+  }
+
+  await supabase.from("notice_recipients").insert(
+    target.recipientIds.map((recipient_user_id) => ({
+      notice_id: notice.id,
+      recipient_user_id,
+    })),
+  );
+
+  await writeAudit(session.user, "send_targeted_notice", "notice", notice.id, {
+    target_type: target.auditTarget,
+    target_id: targetId,
+    recipient_count: target.recipientIds.length,
+  });
+
+  revalidatePath("/dashboard/worktree");
   revalidatePath("/dashboard/admin");
   revalidatePath("/dashboard/employer");
   revalidatePath("/dashboard/employee");

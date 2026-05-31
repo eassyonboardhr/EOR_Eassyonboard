@@ -576,54 +576,117 @@ export type Database = {
       }
       leave_requests: {
         Row: {
+          approved_at: string | null
+          approved_by: string | null
           created_at: string
+          created_by: string | null
+          created_for_employee_by: string | null
           days: number
           employee_id: string
           employer_id: string
           end_date: string
+          excluded_holiday_days: number
           id: string
           leave_type: string
+          lop_days: number
+          mobile_number: string | null
+          paid_leave_days: number
           reason: string | null
+          rejected_at: string | null
+          rejected_by: string | null
+          rejection_reason: string | null
           reviewed_at: string | null
           reviewed_by: string | null
           reviewer_notes: string | null
           start_date: string
           status: Database["public"]["Enums"]["leave_request_status"]
+          team_id: string | null
+          total_leave_days: number | null
+          total_selected_days: number | null
           updated_at: string
         }
         Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
           created_at?: string
+          created_by?: string | null
+          created_for_employee_by?: string | null
           days: number
           employee_id: string
           employer_id: string
           end_date: string
+          excluded_holiday_days?: number
           id?: string
           leave_type: string
+          lop_days?: number
+          mobile_number?: string | null
+          paid_leave_days?: number
           reason?: string | null
+          rejected_at?: string | null
+          rejected_by?: string | null
+          rejection_reason?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
           reviewer_notes?: string | null
           start_date: string
           status?: Database["public"]["Enums"]["leave_request_status"]
+          team_id?: string | null
+          total_leave_days?: number | null
+          total_selected_days?: number | null
           updated_at?: string
         }
         Update: {
+          approved_at?: string | null
+          approved_by?: string | null
           created_at?: string
+          created_by?: string | null
+          created_for_employee_by?: string | null
           days?: number
           employee_id?: string
           employer_id?: string
           end_date?: string
+          excluded_holiday_days?: number
           id?: string
           leave_type?: string
+          lop_days?: number
+          mobile_number?: string | null
+          paid_leave_days?: number
           reason?: string | null
+          rejected_at?: string | null
+          rejected_by?: string | null
+          rejection_reason?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
           reviewer_notes?: string | null
           start_date?: string
           status?: Database["public"]["Enums"]["leave_request_status"]
+          team_id?: string | null
+          total_leave_days?: number | null
+          total_selected_days?: number | null
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "leave_requests_approved_by_fkey"
+            columns: ["approved_by"]
+            isOneToOne: false
+            referencedRelation: "portal_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leave_requests_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "portal_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leave_requests_created_for_employee_by_fkey"
+            columns: ["created_for_employee_by"]
+            isOneToOne: false
+            referencedRelation: "portal_users"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "leave_requests_employee_id_fkey"
             columns: ["employee_id"]
@@ -643,6 +706,372 @@ export type Database = {
             columns: ["reviewed_by"]
             isOneToOne: false
             referencedRelation: "portal_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leave_requests_rejected_by_fkey"
+            columns: ["rejected_by"]
+            isOneToOne: false
+            referencedRelation: "portal_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leave_requests_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      leave_request_days: {
+        Row: {
+          absence_id: string | null
+          created_at: string
+          date: string
+          employee_id: string
+          id: string
+          is_holiday: boolean
+          is_lop: boolean
+          leave_request_id: string
+          status: Database["public"]["Enums"]["leave_request_status"]
+        }
+        Insert: {
+          absence_id?: string | null
+          created_at?: string
+          date: string
+          employee_id: string
+          id?: string
+          is_holiday?: boolean
+          is_lop?: boolean
+          leave_request_id: string
+          status?: Database["public"]["Enums"]["leave_request_status"]
+        }
+        Update: {
+          absence_id?: string | null
+          created_at?: string
+          date?: string
+          employee_id?: string
+          id?: string
+          is_holiday?: boolean
+          is_lop?: boolean
+          leave_request_id?: string
+          status?: Database["public"]["Enums"]["leave_request_status"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "leave_request_days_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leave_request_days_leave_request_id_fkey"
+            columns: ["leave_request_id"]
+            isOneToOne: false
+            referencedRelation: "leave_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      holidays: {
+        Row: {
+          created_at: string
+          date: string
+          employer_id: string | null
+          id: string
+          is_weekly_off: boolean
+          name: string
+          type: string
+        }
+        Insert: {
+          created_at?: string
+          date: string
+          employer_id?: string | null
+          id?: string
+          is_weekly_off?: boolean
+          name: string
+          type?: string
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          employer_id?: string | null
+          id?: string
+          is_weekly_off?: boolean
+          name?: string
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "holidays_employer_id_fkey"
+            columns: ["employer_id"]
+            isOneToOne: false
+            referencedRelation: "employers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      weekly_off_rules: {
+        Row: {
+          active: boolean
+          approved_at: string | null
+          approved_by: string | null
+          created_at: string
+          effective_from: string
+          employer_id: string
+          id: string
+          is_weekly_off: boolean
+          source_request_id: string | null
+          updated_at: string
+          weekday: number
+        }
+        Insert: {
+          active?: boolean
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          effective_from: string
+          employer_id: string
+          id?: string
+          is_weekly_off?: boolean
+          source_request_id?: string | null
+          updated_at?: string
+          weekday: number
+        }
+        Update: {
+          active?: boolean
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          effective_from?: string
+          employer_id?: string
+          id?: string
+          is_weekly_off?: boolean
+          source_request_id?: string | null
+          updated_at?: string
+          weekday?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "weekly_off_rules_approved_by_fkey"
+            columns: ["approved_by"]
+            isOneToOne: false
+            referencedRelation: "portal_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "weekly_off_rules_employer_id_fkey"
+            columns: ["employer_id"]
+            isOneToOne: false
+            referencedRelation: "employers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      holiday_calendar_change_requests: {
+        Row: {
+          admin_notes: string | null
+          created_at: string
+          effective_date: string
+          employer_id: string
+          id: string
+          proposed_payload: Json
+          request_type: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+          submitted_by: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          admin_notes?: string | null
+          created_at?: string
+          effective_date: string
+          employer_id: string
+          id?: string
+          proposed_payload?: Json
+          request_type: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          submitted_by?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          admin_notes?: string | null
+          created_at?: string
+          effective_date?: string
+          employer_id?: string
+          id?: string
+          proposed_payload?: Json
+          request_type?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          submitted_by?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "holiday_calendar_change_requests_employer_id_fkey"
+            columns: ["employer_id"]
+            isOneToOne: false
+            referencedRelation: "employers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "holiday_calendar_change_requests_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "portal_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "holiday_calendar_change_requests_submitted_by_fkey"
+            columns: ["submitted_by"]
+            isOneToOne: false
+            referencedRelation: "portal_users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      holiday_overrides: {
+        Row: {
+          approved_at: string | null
+          approved_by: string | null
+          created_at: string
+          date: string
+          employer_id: string
+          id: string
+          name: string | null
+          override_type: string
+          reason: string | null
+          source_request_id: string | null
+        }
+        Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          date: string
+          employer_id: string
+          id?: string
+          name?: string | null
+          override_type: string
+          reason?: string | null
+          source_request_id?: string | null
+        }
+        Update: {
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          date?: string
+          employer_id?: string
+          id?: string
+          name?: string | null
+          override_type?: string
+          reason?: string | null
+          source_request_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "holiday_overrides_approved_by_fkey"
+            columns: ["approved_by"]
+            isOneToOne: false
+            referencedRelation: "portal_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "holiday_overrides_employer_id_fkey"
+            columns: ["employer_id"]
+            isOneToOne: false
+            referencedRelation: "employers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "holiday_overrides_source_request_id_fkey"
+            columns: ["source_request_id"]
+            isOneToOne: false
+            referencedRelation: "holiday_calendar_change_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      employee_absences: {
+        Row: {
+          created_at: string
+          employee_id: string
+          employer_id: string
+          end_date: string
+          excluded_holiday_days: number
+          id: string
+          is_lop: boolean
+          leave_request_id: string | null
+          marked_by: string | null
+          mobile_number: string | null
+          reason: string | null
+          start_date: string
+          status: string
+          team_id: string | null
+          total_absent_days: number
+          total_selected_days: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          employee_id: string
+          employer_id: string
+          end_date: string
+          excluded_holiday_days?: number
+          id?: string
+          is_lop?: boolean
+          leave_request_id?: string | null
+          marked_by?: string | null
+          mobile_number?: string | null
+          reason?: string | null
+          start_date: string
+          status?: string
+          team_id?: string | null
+          total_absent_days: number
+          total_selected_days: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          employee_id?: string
+          employer_id?: string
+          end_date?: string
+          excluded_holiday_days?: number
+          id?: string
+          is_lop?: boolean
+          leave_request_id?: string | null
+          marked_by?: string | null
+          mobile_number?: string | null
+          reason?: string | null
+          start_date?: string
+          status?: string
+          team_id?: string | null
+          total_absent_days?: number
+          total_selected_days?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employee_absences_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employee_absences_employer_id_fkey"
+            columns: ["employer_id"]
+            isOneToOne: false
+            referencedRelation: "employers"
             referencedColumns: ["id"]
           },
         ]
@@ -685,6 +1114,87 @@ export type Database = {
             columns: ["recipient_user_id"]
             isOneToOne: false
             referencedRelation: "portal_users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      team_members: {
+        Row: {
+          created_at: string
+          employee_id: string
+          id: string
+          role_in_team: string | null
+          team_id: string
+        }
+        Insert: {
+          created_at?: string
+          employee_id: string
+          id?: string
+          role_in_team?: string | null
+          team_id: string
+        }
+        Update: {
+          created_at?: string
+          employee_id?: string
+          id?: string
+          role_in_team?: string | null
+          team_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_members_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "team_members_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      teams: {
+        Row: {
+          created_at: string
+          employer_id: string
+          id: string
+          manager_employee_id: string | null
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          employer_id: string
+          id?: string
+          manager_employee_id?: string | null
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          employer_id?: string
+          id?: string
+          manager_employee_id?: string | null
+          name?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "teams_employer_id_fkey"
+            columns: ["employer_id"]
+            isOneToOne: false
+            referencedRelation: "employers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "teams_manager_employee_id_fkey"
+            columns: ["manager_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
             referencedColumns: ["id"]
           },
         ]

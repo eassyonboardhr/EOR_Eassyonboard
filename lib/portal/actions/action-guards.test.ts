@@ -18,10 +18,12 @@ const getPortalSession = vi.fn();
 const requirePortalRole = vi.fn();
 const getSupabaseAdmin = vi.fn();
 const revalidatePath = vi.fn();
+const headers = vi.fn();
 const createInvitation = vi.fn();
 const clerkClient = vi.fn();
 
 vi.mock("next/cache", () => ({ revalidatePath }));
+vi.mock("next/headers", () => ({ headers }));
 vi.mock("server-only", () => ({}));
 vi.mock("@clerk/nextjs/server", () => ({ clerkClient }));
 vi.mock("@/lib/portal/session", async () => {
@@ -119,6 +121,61 @@ function createSupabaseMock() {
   };
 }
 
+function createTargetedNoticeSupabaseMock({
+  employeeEmployerId = "employer_1",
+  employeePortalUserId = "portal_employee_1",
+  employeeLookupError = null as Error | null,
+} = {}) {
+  const inserts: Array<{ table: string; payload: unknown }> = [];
+  const eqCalls: Array<{ table: string; column: string; value: unknown }> = [];
+
+  const table = (name: string) => {
+    const query = {
+      select: vi.fn(() => query),
+      eq: vi.fn((column: string, value: unknown) => {
+        eqCalls.push({ table: name, column, value });
+        return query;
+      }),
+      not: vi.fn(() => query),
+      insert: vi.fn((payload: unknown) => {
+        inserts.push({ table: name, payload });
+        return query;
+      }),
+      single: vi.fn(async () => {
+        if (name === "employees") {
+          return {
+            data: employeeLookupError
+              ? null
+              : {
+                  id: "employee_1",
+                  employer_id: employeeEmployerId,
+                  portal_user_id: employeePortalUserId,
+                  full_name: "Employee One",
+                },
+            error: employeeLookupError,
+          };
+        }
+
+        if (name === "notices") {
+          return { data: { id: "notice_1" }, error: null };
+        }
+
+        return { data: null, error: null };
+      }),
+    };
+
+    return query;
+  };
+
+  return {
+    eqCalls,
+    inserts,
+    client: {
+      from: vi.fn(table),
+    },
+  };
+}
+
 beforeEach(() => {
   getPortalSession.mockResolvedValue(session);
   requirePortalRole.mockResolvedValue(session);
@@ -129,6 +186,12 @@ beforeEach(() => {
   });
   createInvitation.mockResolvedValue({ id: "invitation_1" });
   revalidatePath.mockReset();
+  headers.mockResolvedValue(
+    new Map([
+      ["host", "localhost:3000"],
+      ["x-forwarded-proto", "http"],
+    ]),
+  );
 });
 
 describe("server action authorization guards", () => {
@@ -172,6 +235,74 @@ describe("server action authorization guards", () => {
     ).rejects.toThrow("active");
 
     expect(supabase.client.from).not.toHaveBeenCalled();
+  });
+});
+
+describe("targeted notices", () => {
+  test("employer admins can send targeted notices only to their own employees", async () => {
+    const activeSession = {
+      ...session,
+      user: {
+        ...session.user,
+        status: "active",
+        role: "employer_admin",
+        employer_id: "employer_1",
+      },
+    };
+    getPortalSession.mockResolvedValue(activeSession);
+    const supabase = createTargetedNoticeSupabaseMock();
+    getSupabaseAdmin.mockReturnValue(supabase.client);
+    const { sendTargetedNoticeAction } = await import("@/lib/portal/actions/notices");
+
+    await sendTargetedNoticeAction(
+      form({
+        target_type: "employee",
+        target_id: "employee_1",
+        title: "Hello",
+        body: "World",
+        priority: "normal",
+      }),
+    );
+
+    expect(supabase.eqCalls).toContainEqual({
+      table: "employees",
+      column: "employer_id",
+      value: "employer_1",
+    });
+    expect(supabase.inserts).toContainEqual({
+      table: "notice_recipients",
+      payload: [{ notice_id: "notice_1", recipient_user_id: "portal_employee_1" }],
+    });
+  });
+
+  test("employer admins cannot send targeted notices to employer nodes", async () => {
+    const activeSession = {
+      ...session,
+      user: {
+        ...session.user,
+        status: "active",
+        role: "employer_admin",
+        employer_id: "employer_1",
+      },
+    };
+    getPortalSession.mockResolvedValue(activeSession);
+    const supabase = createTargetedNoticeSupabaseMock();
+    getSupabaseAdmin.mockReturnValue(supabase.client);
+    const { sendTargetedNoticeAction } = await import("@/lib/portal/actions/notices");
+
+    await expect(
+      sendTargetedNoticeAction(
+        form({
+          target_type: "employer",
+          target_id: "employer_2",
+          title: "Hello",
+          body: "World",
+          priority: "normal",
+        }),
+      ),
+    ).rejects.toThrow("recipient");
+
+    expect(supabase.inserts).toEqual([]);
   });
 });
 
@@ -268,7 +399,7 @@ describe("admin-created employer invitations", () => {
     expect(createInvitation).toHaveBeenCalledWith(
       expect.objectContaining({
         emailAddress: "priya@acme.example",
-        redirectUrl: "/sign-up",
+        redirectUrl: "http://localhost:3000/sign-up",
         publicMetadata: expect.objectContaining({
           portalRole: "employer_admin",
           source: "admin_created_employer",

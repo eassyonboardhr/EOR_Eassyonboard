@@ -26,7 +26,7 @@ export default function SignUpPage() {
           routing="path"
           path="/sign-up"
           signInUrl="/sign-in"
-          fallbackRedirectUrl="/request-received"
+          fallbackRedirectUrl="/dashboard"
         />
       </section>
     </main>

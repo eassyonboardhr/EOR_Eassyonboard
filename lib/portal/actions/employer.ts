@@ -2,11 +2,39 @@
 
 import { clerkClient } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { optionalString, requireString } from "@/lib/portal/form";
 import { getPortalSession, requirePortalRole } from "@/lib/portal/session";
 import { writeAudit } from "@/lib/portal/actions/audit";
+
+async function appUrl(path: string) {
+  const configuredOrigin =
+    process.env.NEXT_PUBLIC_APP_URL ??
+    process.env.APP_URL ??
+    process.env.VERCEL_PROJECT_PRODUCTION_URL;
+
+  if (configuredOrigin) {
+    const origin = configuredOrigin.startsWith("http")
+      ? configuredOrigin
+      : `https://${configuredOrigin}`;
+    return new URL(path, origin).toString();
+  }
+
+  const requestHeaders = await headers();
+  const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host");
+
+  if (!host) {
+    throw new Error("Could not determine application URL for invitation.");
+  }
+
+  const proto =
+    requestHeaders.get("x-forwarded-proto") ??
+    (host.startsWith("localhost") || host.startsWith("127.") ? "http" : "https");
+
+  return new URL(path, `${proto}://${host}`).toString();
+}
 
 export async function updateEmployerLeadAction(formData: FormData) {
   const session = await getPortalSession();
@@ -53,7 +81,7 @@ export async function createEmployerInviteAction(formData: FormData) {
   const clerk = await clerkClient();
   await clerk.invitations.createInvitation({
     emailAddress: email,
-    redirectUrl: "/sign-up",
+    redirectUrl: await appUrl("/sign-up"),
     notify: true,
     ignoreExisting: true,
     publicMetadata: {
