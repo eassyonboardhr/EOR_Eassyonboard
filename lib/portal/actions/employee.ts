@@ -61,12 +61,16 @@ export async function approveEmployeeRequestAction(formData: FormData) {
 
   const { data: request, error } = await supabase
     .from("employee_requests")
-    .select("id, employer_id, email, full_name, job_title, department, proposed_start_date")
+    .select("id, employer_id, email, full_name, job_title, department, proposed_start_date, status")
     .eq("id", requestId)
     .single();
 
   if (error || !request) {
     throw new Error(error?.message ?? "Employee request not found.");
+  }
+
+  if (request.status !== "pending") {
+    throw new Error("Employee request already reviewed.");
   }
 
   const { data: employee, error: employeeError } = await supabase
@@ -113,7 +117,8 @@ export async function approveEmployeeRequestAction(formData: FormData) {
       reviewed_by: session.user.id,
       reviewed_at: new Date().toISOString(),
     })
-    .eq("id", requestId);
+    .eq("id", requestId)
+    .eq("status", "pending");
 
   await writeAudit(session.user, "approve_employee_request", "employee_request", requestId, {
     employee_id: employee.id,
@@ -134,7 +139,8 @@ export async function rejectEmployeeRequestAction(formData: FormData) {
       reviewed_by: session.user.id,
       reviewed_at: new Date().toISOString(),
     })
-    .eq("id", requestId);
+    .eq("id", requestId)
+    .eq("status", "pending");
 
   await writeAudit(session.user, "reject_employee_request", "employee_request", requestId);
   revalidatePath("/dashboard/admin");

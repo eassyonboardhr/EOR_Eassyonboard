@@ -1,5 +1,6 @@
 "use server";
 
+import { clerkClient } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -25,6 +26,50 @@ export async function updateEmployerLeadAction(formData: FormData) {
   revalidatePath("/dashboard");
 }
 
+export async function createEmployerInviteAction(formData: FormData) {
+  const session = await requirePortalRole(["super_admin", "admin"]);
+  const supabase = getSupabaseAdmin();
+  const email = requireString(formData, "email").toLowerCase();
+  const companyName = requireString(formData, "company_name");
+  const contactName = optionalString(formData, "contact_name");
+
+  const { data: employer, error: employerError } = await supabase
+    .from("employers")
+    .insert({
+      name: companyName,
+      contact_email: email,
+      contact_name: contactName,
+      status: "active",
+      approved_by: session.user.id,
+      approved_at: new Date().toISOString(),
+    })
+    .select("id")
+    .single();
+
+  if (employerError || !employer) {
+    throw new Error(employerError?.message ?? "Could not create employer.");
+  }
+
+  const clerk = await clerkClient();
+  await clerk.invitations.createInvitation({
+    emailAddress: email,
+    redirectUrl: "/sign-up",
+    notify: true,
+    ignoreExisting: true,
+    publicMetadata: {
+      portalRole: "employer_admin",
+      employerId: employer.id,
+      source: "admin_created_employer",
+    },
+  });
+
+  await writeAudit(session.user, "create_employer_invite", "employer", employer.id, {
+    email,
+  });
+
+  revalidatePath("/dashboard/admin");
+}
+
 export async function approveLeadAction(formData: FormData) {
   const session = await requirePortalRole(["super_admin", "admin"]);
   const leadId = requireString(formData, "lead_id");
@@ -32,12 +77,16 @@ export async function approveLeadAction(formData: FormData) {
 
   const { data: lead, error } = await supabase
     .from("employer_leads")
-    .select("id, portal_user_id, email, contact_name, company_name")
+    .select("id, portal_user_id, email, contact_name, company_name, status")
     .eq("id", leadId)
     .single();
 
   if (error || !lead) {
     throw new Error(error?.message ?? "Lead not found.");
+  }
+
+  if (lead.status !== "pending") {
+    throw new Error("Employer lead already reviewed.");
   }
 
   const { data: employer, error: employerError } = await supabase
@@ -75,7 +124,8 @@ export async function approveLeadAction(formData: FormData) {
       reviewed_by: session.user.id,
       reviewed_at: new Date().toISOString(),
     })
-    .eq("id", leadId);
+    .eq("id", leadId)
+    .eq("status", "pending");
 
   await writeAudit(session.user, "approve_lead", "employer_lead", leadId, {
     employer_id: employer.id,
@@ -96,7 +146,8 @@ export async function rejectLeadAction(formData: FormData) {
       reviewed_by: session.user.id,
       reviewed_at: new Date().toISOString(),
     })
-    .eq("id", leadId);
+    .eq("id", leadId)
+    .eq("status", "pending");
 
   await writeAudit(session.user, "reject_lead", "employer_lead", leadId);
   revalidatePath("/dashboard/admin");

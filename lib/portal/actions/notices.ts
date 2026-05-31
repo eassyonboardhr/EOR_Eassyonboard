@@ -3,8 +3,22 @@
 import { revalidatePath } from "next/cache";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { booleanValue, optionalString, requireString } from "@/lib/portal/form";
-import { getPortalSession, isPlatformAdmin } from "@/lib/portal/session";
+import {
+  ensureActivePortalSession,
+  getPortalSession,
+  isPlatformAdmin,
+} from "@/lib/portal/session";
 import { writeAudit } from "@/lib/portal/actions/audit";
+
+function noticePriority(formData: FormData) {
+  const priority = requireString(formData, "priority");
+
+  if (priority !== "normal" && priority !== "important" && priority !== "urgent") {
+    throw new Error("Invalid notice priority.");
+  }
+
+  return priority;
+}
 
 async function resolveNoticeRecipients(audience: string, senderEmployerId: string | null) {
   const supabase = getSupabaseAdmin();
@@ -29,6 +43,7 @@ async function resolveNoticeRecipients(audience: string, senderEmployerId: strin
 
 export async function sendNoticeAction(formData: FormData) {
   const session = await getPortalSession();
+  ensureActivePortalSession(session);
   const audience = requireString(formData, "audience");
 
   if (!isPlatformAdmin(session.user.role) && session.user.role !== "employer_admin") {
@@ -48,7 +63,7 @@ export async function sendNoticeAction(formData: FormData) {
       employer_id: session.user.role === "employer_admin" ? session.user.employer_id : null,
       title: requireString(formData, "title"),
       body: requireString(formData, "body"),
-      priority: requireString(formData, "priority"),
+      priority: noticePriority(formData),
       requires_acknowledgement: booleanValue(formData, "requires_acknowledgement"),
     })
     .select("id")

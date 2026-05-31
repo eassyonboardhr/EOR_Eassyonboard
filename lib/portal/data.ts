@@ -1,9 +1,12 @@
 import "server-only";
 
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import type { Database } from "@/lib/supabase/database.types";
 import type { PortalCounts, PortalSession } from "@/lib/portal/types";
 
-async function countRows(table: string, filters: Record<string, string> = {}) {
+type PortalTable = keyof Database["public"]["Tables"];
+
+async function countRows(table: PortalTable, filters: Record<string, string> = {}) {
   const supabase = getSupabaseAdmin();
   let query = supabase.from(table).select("id", { count: "exact", head: true });
 

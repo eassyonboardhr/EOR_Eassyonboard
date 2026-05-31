@@ -1,4 +1,8 @@
-import { approveLeadAction, rejectLeadAction } from "@/lib/portal/actions/employer";
+import {
+  approveLeadAction,
+  createEmployerInviteAction,
+  rejectLeadAction,
+} from "@/lib/portal/actions/employer";
 import {
   approveEmployeeRequestAction,
   rejectEmployeeRequestAction,
@@ -35,6 +39,20 @@ export default async function AdminDashboardPage() {
     >
       <div className="grid gap-5">
         <StatGrid counts={data.counts} />
+
+        <Panel
+          title="Create employer"
+          description="Create an active employer account and send the company admin a Clerk email invitation."
+        >
+          <form action={createEmployerInviteAction} className="grid gap-4 lg:grid-cols-3">
+            <TextInput name="company_name" label="Company name" required />
+            <TextInput name="contact_name" label="Contact person" />
+            <TextInput name="email" label="Admin email" type="email" required />
+            <div className="lg:col-span-3">
+              <SubmitButton>Create and invite</SubmitButton>
+            </div>
+          </form>
+        </Panel>
 
         <Panel title="Employer leads" description="Public signups wait here until an admin approves or rejects them.">
           <div className="grid gap-3">

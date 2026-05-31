@@ -3,7 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { optionalString, requireString } from "@/lib/portal/form";
-import { getPortalSession, isPlatformAdmin, requirePortalRole } from "@/lib/portal/session";
+import {
+  ensureActivePortalSession,
+  getPortalSession,
+  isPlatformAdmin,
+  requirePortalRole,
+} from "@/lib/portal/session";
 import { writeAudit } from "@/lib/portal/actions/audit";
 
 export async function submitResignationAction(formData: FormData) {
@@ -85,6 +90,7 @@ export async function acknowledgeResignationAction(formData: FormData) {
 
 export async function requestOffboardingAction(formData: FormData) {
   const session = await getPortalSession();
+  ensureActivePortalSession(session);
   const supabase = getSupabaseAdmin();
   const employeeId = requireString(formData, "employee_id");
 

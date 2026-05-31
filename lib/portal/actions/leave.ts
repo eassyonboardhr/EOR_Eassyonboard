@@ -3,8 +3,16 @@
 import { revalidatePath } from "next/cache";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { booleanValue, numberValue, optionalString, requireString } from "@/lib/portal/form";
-import { getPortalSession, isPlatformAdmin, requirePortalRole } from "@/lib/portal/session";
+import {
+  ensureActivePortalSession,
+  getPortalSession,
+  isPlatformAdmin,
+  requirePortalRole,
+} from "@/lib/portal/session";
 import { writeAudit } from "@/lib/portal/actions/audit";
+import type { Database } from "@/lib/supabase/database.types";
+
+type LeaveBalanceUpdate = Database["public"]["Tables"]["leave_balances"]["Update"];
 
 export async function saveLeavePolicyAction(formData: FormData) {
   const session = await requirePortalRole(["employer_admin"]);
@@ -90,6 +98,7 @@ export async function submitLeaveRequestAction(formData: FormData) {
 
 export async function reviewLeaveRequestAction(formData: FormData) {
   const session = await getPortalSession();
+  ensureActivePortalSession(session);
   const decision = requireString(formData, "decision");
 
   if (decision !== "approved" && decision !== "rejected") {
@@ -104,12 +113,16 @@ export async function reviewLeaveRequestAction(formData: FormData) {
   const supabase = getSupabaseAdmin();
   const { data: request } = await supabase
     .from("leave_requests")
-    .select("id, employer_id, employee_id, leave_type, days")
+    .select("id, employer_id, employee_id, leave_type, days, status")
     .eq("id", requestId)
     .single();
 
   if (!request) {
     throw new Error("Leave request not found.");
+  }
+
+  if (request.status !== "pending") {
+    throw new Error("Leave request already reviewed.");
   }
 
   if (
@@ -127,7 +140,8 @@ export async function reviewLeaveRequestAction(formData: FormData) {
       reviewed_at: new Date().toISOString(),
       reviewer_notes: optionalString(formData, "reviewer_notes"),
     })
-    .eq("id", requestId);
+    .eq("id", requestId)
+    .eq("status", "pending");
 
   if (decision === "approved") {
     const year = new Date().getFullYear();
@@ -149,13 +163,23 @@ export async function reviewLeaveRequestAction(formData: FormData) {
 
       if (balance) {
         const balanceRecord = balance as Record<string, unknown>;
+        const payload: LeaveBalanceUpdate = {
+          adjusted_by: session.user.id,
+          adjustment_notes: `Leave request ${requestId} approved.`,
+        };
+        const nextBalance = Math.max(
+          0,
+          Number(balanceRecord[field] ?? 0) - Number(request.days),
+        );
+
+        if (field === "casual_available") payload.casual_available = nextBalance;
+        if (field === "sick_available") payload.sick_available = nextBalance;
+        if (field === "earned_available") payload.earned_available = nextBalance;
+        if (field === "comp_off_available") payload.comp_off_available = nextBalance;
+
         await supabase
           .from("leave_balances")
-          .update({
-            [field]: Math.max(0, Number(balanceRecord[field] ?? 0) - Number(request.days)),
-            adjusted_by: session.user.id,
-            adjustment_notes: `Leave request ${requestId} approved.`,
-          })
+          .update(payload)
           .eq("id", String(balanceRecord.id));
       }
     }

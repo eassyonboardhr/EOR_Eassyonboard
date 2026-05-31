@@ -46,6 +46,18 @@ async function ensureLeadRecord(portalUser: PortalUser, email: string, name: str
   });
 }
 
+async function findActiveEmployerByEmail(email: string) {
+  const supabase = getSupabaseAdmin();
+  const { data: employer } = await supabase
+    .from("employers")
+    .select("id")
+    .eq("contact_email", email.toLowerCase())
+    .eq("status", "active")
+    .maybeSingle();
+
+  return employer;
+}
+
 export async function getPortalSession(): Promise<PortalSession> {
   const { userId } = await auth();
 
@@ -97,6 +109,7 @@ export async function getPortalSession(): Promise<PortalSession> {
     .eq("email", email.toLowerCase())
     .is("portal_user_id", null)
     .maybeSingle();
+  const invitedEmployer = invitedEmployee ? null : await findActiveEmployerByEmail(email);
 
   const bootstrapRole: PortalRole = isAdminEmail(email)
     ? "super_admin"
@@ -104,7 +117,9 @@ export async function getPortalSession(): Promise<PortalSession> {
       ? "employee"
       : "employer_admin";
   const bootstrapStatus =
-    bootstrapRole === "super_admin" || bootstrapRole === "employee" ? "active" : "pending";
+    bootstrapRole === "super_admin" || bootstrapRole === "employee" || invitedEmployer
+      ? "active"
+      : "pending";
 
   const { data: insertedUser, error: insertError } = await supabase
     .from("portal_users")
@@ -114,6 +129,7 @@ export async function getPortalSession(): Promise<PortalSession> {
       full_name: name,
       role: bootstrapRole,
       status: bootstrapStatus,
+      employer_id: invitedEmployer?.id,
       last_seen_at: new Date().toISOString(),
     })
     .select("id, clerk_user_id, email, full_name, role, status, employer_id")
@@ -150,6 +166,12 @@ export async function requirePortalRole(roles: PortalRole[]) {
   }
 
   return session;
+}
+
+export function ensureActivePortalSession(session: PortalSession) {
+  if (session.user.status !== "active") {
+    throw new Error("An active portal account is required for this action.");
+  }
 }
 
 export function isPlatformAdmin(role: PortalRole) {

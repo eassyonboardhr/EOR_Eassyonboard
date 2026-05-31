@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import type { Json } from "@/lib/supabase/database.types";
 import type { PortalUser } from "@/lib/portal/types";
 
 export async function writeAudit(
@@ -8,7 +9,7 @@ export async function writeAudit(
   action: string,
   entityType: string,
   entityId: string | null,
-  metadata: Record<string, unknown> = {},
+  metadata: Json = {},
 ) {
   const supabase = getSupabaseAdmin();
   await supabase.from("audit_events").insert({
