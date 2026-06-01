@@ -3,7 +3,8 @@ import "server-only";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import {
   buildEmployeeDocumentChecklist,
-  withSignedUrls,
+  withScopedCompanyDocumentUrls,
+  withScopedEmployeeDocumentUrls,
 } from "@/lib/portal/document-access";
 import { isPlatformAdmin } from "@/lib/portal/session";
 import type { PortalSession } from "@/lib/portal/types";
@@ -72,9 +73,9 @@ export async function getGlobalOnboardingData(
       supabase.from("custom_field_values").select("*, custom_fields(*)").order("updated_at", { ascending: false }),
       supabase.from("employers").select("id, name").order("name", { ascending: true }),
     ]);
-    const signedCompanyDocuments = await withSignedUrls(documents.data ?? [], "company-documents");
-    const signedEmployeeDocuments = await withSignedUrls(employeeDocuments.data ?? [], "employee-documents");
-    const signedTemplates = await withSignedUrls(templates.data ?? [], "company-documents");
+    const signedCompanyDocuments = await withScopedCompanyDocumentUrls(documents.data ?? [], session);
+    const signedEmployeeDocuments = await withScopedEmployeeDocumentUrls(employeeDocuments.data ?? [], session);
+    const signedTemplates = await withScopedCompanyDocumentUrls(templates.data ?? [], session);
 
     return {
       mode: "admin" as const,
@@ -141,8 +142,8 @@ export async function getGlobalOnboardingData(
       supabase.from("custom_field_values").select("*, custom_fields(*)").order("updated_at", { ascending: false }),
     ]);
 
-    const signedCompanyDocuments = await withSignedUrls(companyDocuments.data ?? [], "company-documents");
-    const signedTemplates = await withSignedUrls(templates.data ?? [], "company-documents");
+    const signedCompanyDocuments = await withScopedCompanyDocumentUrls(companyDocuments.data ?? [], session);
+    const signedTemplates = await withScopedCompanyDocumentUrls(templates.data ?? [], session);
 
     return {
       mode: "employer" as const,
@@ -185,12 +186,17 @@ export async function getGlobalOnboardingData(
     .limit(1)
     .maybeSingle();
 
-  const [profile, progress, status, documents, experience, fields, fieldValues] = await Promise.all([
+  const [profile, progress, status, documents, experience, address, emergency, identity, bank, education, fields, fieldValues] = await Promise.all([
     supabase.from("employee_profiles").select("*").eq("employee_id", employee.id).maybeSingle(),
     supabase.from("employee_onboarding_progress").select("*").eq("employee_id", employee.id).maybeSingle(),
     supabase.from("employee_onboarding_status").select("*").eq("employee_id", employee.id).maybeSingle(),
     supabase.from("employee_documents").select("*").eq("employee_id", employee.id).order("uploaded_at", { ascending: false }),
     supabase.from("employee_experience").select("*").eq("employee_id", employee.id).maybeSingle(),
+    supabase.from("employee_addresses").select("*").eq("employee_id", employee.id).maybeSingle(),
+    supabase.from("employee_emergency_contacts").select("*").eq("employee_id", employee.id).maybeSingle(),
+    supabase.from("employee_identity_details").select("*").eq("employee_id", employee.id).maybeSingle(),
+    supabase.from("employee_bank_details").select("*").eq("employee_id", employee.id).maybeSingle(),
+    supabase.from("employee_education").select("*").eq("employee_id", employee.id).maybeSingle(),
     company?.id
       ? supabase
           .from("custom_fields")
@@ -203,12 +209,18 @@ export async function getGlobalOnboardingData(
     supabase.from("custom_field_values").select("*").eq("entity_id", employee.id),
   ]);
 
-  const signedDocuments = await withSignedUrls(documents.data ?? [], "employee-documents");
+  const signedDocuments = await withScopedEmployeeDocumentUrls(documents.data ?? [], session);
 
   return {
     mode: "employee" as const,
     employee,
     profile: profile.data,
+    address: address.data,
+    emergency: emergency.data,
+    identity: identity.data,
+    bank: bank.data,
+    education: education.data,
+    experience: experience.data,
     progress: progress.data,
     status: status.data,
     documents: signedDocuments,

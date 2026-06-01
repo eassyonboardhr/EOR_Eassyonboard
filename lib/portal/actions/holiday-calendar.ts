@@ -186,6 +186,9 @@ async function notifyActiveEmployees(employerId: string, actorId: string, title:
       body: `${title} has been approved. Future leave calculations will use the updated company calendar.`,
       priority: "normal",
       requires_acknowledgement: false,
+      action_url: "/dashboard/employee/leaves",
+      action_label: "Open Leave Calendar",
+      category: "holiday_calendar",
     })
     .select("id")
     .single();

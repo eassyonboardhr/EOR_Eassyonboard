@@ -82,12 +82,24 @@ export default async function EmployerTeamsPage() {
           </form>
         </section>
 
-        <section className="grid gap-5 xl:grid-cols-2">
+        <section className="grid gap-5 xl:grid-cols-[280px_minmax(0,1fr)_340px]">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="text-base font-semibold text-slate-950">Teams</h2>
+            <div className="mt-4 grid gap-2">
+              {teams.map((team) => (
+                <a key={team.id} href={`#team-${team.id}`} className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 hover:border-blue-200 hover:bg-blue-50">
+                  {team.name}
+                </a>
+              ))}
+              {teams.length === 0 ? <p className="text-sm text-slate-500">No teams yet.</p> : null}
+            </div>
+          </div>
+          <div className="grid gap-5">
           {teams.map((team) => {
             const teamMembers = members.filter((member) => member.team_id === team.id);
             const manager = employees.find((employee) => employee.id === team.manager_employee_id);
             return (
-              <div key={team.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div key={team.id} id={`team-${team.id}`} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <h2 className="text-base font-semibold text-slate-950">{team.name}</h2>
@@ -97,6 +109,12 @@ export default async function EmployerTeamsPage() {
                   </div>
                   <form action={deleteTeamAction}>
                     <input type="hidden" name="team_id" value={team.id} />
+                    {teamMembers.length > 0 ? (
+                      <label className="mb-2 flex items-center gap-2 text-xs font-semibold text-rose-700">
+                        <input type="checkbox" name="confirm_delete" value="true" />
+                        Confirm
+                      </label>
+                    ) : null}
                     <button className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700">
                       Delete
                     </button>
@@ -150,6 +168,12 @@ export default async function EmployerTeamsPage() {
               Create your first team to start shaping the Worktree.
             </div>
           ) : null}
+          </div>
+          <aside className="rounded-2xl border border-blue-100 bg-blue-50 p-5 text-sm leading-6 text-blue-900">
+            <h2 className="text-base font-semibold">Worktree Structure</h2>
+            <p className="mt-2">Create teams, choose a manager, then add members with their team roles. This page is the source of truth for the Worktree chart.</p>
+            <Link href="/dashboard/worktree" className="mt-4 inline-flex rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white">Preview Worktree</Link>
+          </aside>
         </section>
       </div>
     </PortalShell>

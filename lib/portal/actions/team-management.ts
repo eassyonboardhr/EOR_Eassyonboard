@@ -92,6 +92,13 @@ export async function deleteTeamAction(formData: FormData) {
   const teamId = requireString(formData, "team_id");
   await assertTeamScope(teamId, employerId);
   const supabase = getSupabaseAdmin();
+  const { count } = await supabase
+    .from("team_members")
+    .select("employee_id", { count: "exact", head: true })
+    .eq("team_id", teamId);
+  if ((count ?? 0) > 0 && optionalString(formData, "confirm_delete") !== "true") {
+    throw new Error("Remove team members or confirm deletion before deleting this team.");
+  }
   await supabase.from("team_members").delete().eq("team_id", teamId);
   const { error } = await supabase.from("teams").delete().eq("id", teamId).eq("employer_id", employerId);
   if (error) throw new Error(error.message);

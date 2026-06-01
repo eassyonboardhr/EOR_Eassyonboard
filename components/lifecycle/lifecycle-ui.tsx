@@ -40,6 +40,9 @@ type AnyRow = {
   hours_per_week?: number | string | null;
   billing_currency?: string | null;
   reason?: string | null;
+  admin_notes?: string | null;
+  employer_notes?: string | null;
+  rejection_reason?: string | null;
   preferred_last_working_day?: string | null;
   calculated_last_working_day?: string | null;
   target_last_working_day?: string | null;
@@ -108,6 +111,24 @@ function MetricStrip({ counts }: { counts?: { pending: number; approved: number;
         <div key={label} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">{label}</p>
           <p className={`mt-2 text-2xl font-bold ${tone}`}>{value}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function TimelineStrip({ steps, current }: { steps: string[]; current?: string | null }) {
+  const currentIndex = Math.max(0, steps.findIndex((step) => step === current));
+  return (
+    <div className="mt-4 flex gap-2 overflow-x-auto">
+      {steps.map((step, index) => (
+        <div
+          key={step}
+          className={`shrink-0 rounded-full border px-3 py-1 text-[11px] font-bold capitalize ${
+            index <= currentIndex ? "border-blue-200 bg-blue-50 text-blue-700" : "border-slate-200 bg-slate-50 text-slate-500"
+          }`}
+        >
+          {step.replaceAll("_", " ")}
         </div>
       ))}
     </div>
@@ -352,6 +373,13 @@ export function ResignationLifecycleView({ data }: { role: PortalRole; data: Lif
               </div>
               <StatusBadge value={resignation.status} />
             </div>
+            <TimelineStrip
+              steps={["submitted_to_admin", "forwarded_to_employer", "employer_acknowledged", "offboarding_requested", "completed"]}
+              current={resignation.status}
+            />
+            {resignation.employer_notes ? <p className="mt-3 text-xs text-slate-500">Employer notes: {resignation.employer_notes}</p> : null}
+            {resignation.admin_notes ? <p className="mt-1 text-xs text-slate-500">Admin notes: {resignation.admin_notes}</p> : null}
+            {resignation.rejection_reason ? <p className="mt-1 text-xs font-semibold text-rose-700">Reason: {resignation.rejection_reason}</p> : null}
             {data.mode === "admin" && resignation.status === "submitted_to_admin" ? (
               <div className="mt-4 flex flex-wrap gap-2">
                 <form action={forwardResignationAction}>
@@ -433,6 +461,13 @@ export function OffboardingLifecycleView({ data }: { role: PortalRole; data: Lif
               </div>
               <StatusBadge value={item.status} />
             </div>
+            <TimelineStrip
+              steps={["requested_by_employer", "admin_approved", "in_progress", "completed"]}
+              current={item.status}
+            />
+            {item.employer_notes ? <p className="mt-3 text-xs text-slate-500">Employer notes: {item.employer_notes}</p> : null}
+            {item.admin_notes ? <p className="mt-1 text-xs text-slate-500">Admin notes: {item.admin_notes}</p> : null}
+            {item.rejection_reason ? <p className="mt-1 text-xs font-semibold text-rose-700">Reason: {item.rejection_reason}</p> : null}
             {data.mode === "admin" ? (
               <div className="mt-4 flex flex-wrap gap-2">
                 {item.status === "requested_by_employer" ? (

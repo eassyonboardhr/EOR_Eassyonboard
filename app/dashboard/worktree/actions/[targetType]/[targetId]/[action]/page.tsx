@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PortalShell } from "@/components/portal/ui";
-import { withSignedUrls } from "@/lib/portal/document-access";
+import { withScopedEmployeeDocumentUrls } from "@/lib/portal/document-access";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { isPlatformAdmin, requirePortalRole } from "@/lib/portal/session";
+import type { PortalSession } from "@/lib/portal/types";
 
 type SearchParams = {
   targetType: "employer" | "employee";
@@ -129,7 +130,7 @@ async function getEmployer(targetId: string) {
   };
 }
 
-async function getEmployee(targetId: string) {
+async function getEmployee(targetId: string, session: PortalSession) {
   const supabase = getSupabaseAdmin();
   const [{ data: employee }, { data: compensation }, { data: billing }, { data: profile }, { data: progress }, { data: status }, { data: documents }] = await Promise.all([
     supabase
@@ -158,7 +159,7 @@ async function getEmployee(targetId: string) {
   ]);
 
   if (!employee) return null;
-  const signedDocuments = await withSignedUrls(documents ?? [], "employee-documents");
+  const signedDocuments = await withScopedEmployeeDocumentUrls(documents ?? [], session);
   return { employee, compensation, billing, profile, progress, status, documents: signedDocuments };
 }
 
@@ -333,7 +334,7 @@ export default async function WorktreeActionPage({
     );
   }
 
-  const data = await getEmployee(targetId);
+  const data = await getEmployee(targetId, session);
   if (!data) notFound();
 
   if (

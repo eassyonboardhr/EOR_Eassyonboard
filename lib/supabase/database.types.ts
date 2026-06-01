@@ -956,6 +956,7 @@ export type Database = {
       employee_onboarding_progress: {
         Row: {
           completion_percentage: number
+          completed_steps: Json | null
           current_step: string
           employee_id: string
           id: string
@@ -963,6 +964,7 @@ export type Database = {
         }
         Insert: {
           completion_percentage?: number
+          completed_steps?: Json | null
           current_step?: string
           employee_id: string
           id?: string
@@ -970,6 +972,7 @@ export type Database = {
         }
         Update: {
           completion_percentage?: number
+          completed_steps?: Json | null
           current_step?: string
           employee_id?: string
           id?: string
@@ -1120,10 +1123,12 @@ export type Database = {
           hourly_billing_rate: number | null
           hours_per_week: number
           id: string
+          invite_accepted_at: string | null
           invite_error: string | null
           invite_id: string | null
           invite_sent_at: string | null
           job_title: string | null
+          onboarding_started_at: string | null
           onboarding_notes: string | null
           proposed_start_date: string | null
           requested_by: string | null
@@ -1147,10 +1152,12 @@ export type Database = {
           hourly_billing_rate?: number | null
           hours_per_week?: number
           id?: string
+          invite_accepted_at?: string | null
           invite_error?: string | null
           invite_id?: string | null
           invite_sent_at?: string | null
           job_title?: string | null
+          onboarding_started_at?: string | null
           onboarding_notes?: string | null
           proposed_start_date?: string | null
           requested_by?: string | null
@@ -1174,10 +1181,12 @@ export type Database = {
           hourly_billing_rate?: number | null
           hours_per_week?: number
           id?: string
+          invite_accepted_at?: string | null
           invite_error?: string | null
           invite_id?: string | null
           invite_sent_at?: string | null
           job_title?: string | null
+          onboarding_started_at?: string | null
           onboarding_notes?: string | null
           proposed_start_date?: string | null
           requested_by?: string | null
@@ -2062,7 +2071,10 @@ export type Database = {
       }
       notices: {
         Row: {
+          action_label: string | null
+          action_url: string | null
           body: string
+          category: string | null
           created_at: string
           employer_id: string | null
           id: string
@@ -2073,7 +2085,10 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          action_label?: string | null
+          action_url?: string | null
           body: string
+          category?: string | null
           created_at?: string
           employer_id?: string | null
           id?: string
@@ -2084,7 +2099,10 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          action_label?: string | null
+          action_url?: string | null
           body?: string
+          category?: string | null
           created_at?: string
           employer_id?: string | null
           id?: string

@@ -122,6 +122,9 @@ export async function sendNoticeAction(formData: FormData) {
       body: requireString(formData, "body"),
       priority: noticePriority(formData),
       requires_acknowledgement: booleanValue(formData, "requires_acknowledgement"),
+      action_url: optionalString(formData, "action_url"),
+      action_label: optionalString(formData, "action_label"),
+      category: optionalString(formData, "category"),
     })
     .select("id")
     .single();
@@ -181,6 +184,9 @@ export async function sendTargetedNoticeAction(formData: FormData) {
       body: requireString(formData, "body"),
       priority: noticePriority(formData),
       requires_acknowledgement: booleanValue(formData, "requires_acknowledgement"),
+      action_url: optionalString(formData, "action_url"),
+      action_label: optionalString(formData, "action_label"),
+      category: optionalString(formData, "category"),
     })
     .select("id")
     .single();
@@ -206,6 +212,7 @@ export async function sendTargetedNoticeAction(formData: FormData) {
   revalidatePath("/dashboard/admin");
   revalidatePath("/dashboard/employer");
   revalidatePath("/dashboard/employee");
+  revalidatePath("/dashboard/notices");
 }
 
 export async function markNoticeReadAction(formData: FormData) {
@@ -227,4 +234,5 @@ export async function markNoticeReadAction(formData: FormData) {
   revalidatePath("/dashboard/employee");
   revalidatePath("/dashboard/employer");
   revalidatePath("/dashboard/admin");
+  revalidatePath("/dashboard/notices");
 }

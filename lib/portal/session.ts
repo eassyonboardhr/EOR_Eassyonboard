@@ -100,7 +100,17 @@ export async function getPortalSession(): Promise<PortalSession> {
       throw new Error(updateError.message);
     }
 
-    return { clerkUserId: userId, email, user: updatedUser as PortalUser };
+    const portalUser = updatedUser as PortalUser;
+    if (portalUser.role === "employee") {
+      await supabase
+        .from("employee_requests")
+        .update({ onboarding_started_at: new Date().toISOString() })
+        .eq("email", email.toLowerCase())
+        .not("employee_id", "is", null)
+        .is("onboarding_started_at", null);
+    }
+
+    return { clerkUserId: userId, email, user: portalUser };
   }
 
   const { data: invitedEmployee } = await supabase
@@ -149,6 +159,14 @@ export async function getPortalSession(): Promise<PortalSession> {
         status: "active",
       })
       .eq("id", invitedEmployee.id);
+    await supabase
+      .from("employee_requests")
+      .update({
+        invite_accepted_at: new Date().toISOString(),
+        onboarding_started_at: new Date().toISOString(),
+      })
+      .eq("employee_id", invitedEmployee.id)
+      .is("invite_accepted_at", null);
   }
 
   if (portalUser.role === "employer_admin") {

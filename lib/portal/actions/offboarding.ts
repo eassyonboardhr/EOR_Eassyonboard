@@ -148,6 +148,9 @@ export async function employerAcceptResignationAction(formData: FormData) {
         body: `Your resignation has been accepted. Your notice period is ${noticePeriodDays} day(s), and your last working day is ${lastWorkingDay}.`,
         priority: "important",
         requires_acknowledgement: true,
+        action_url: "/dashboard/employee/leaves",
+        action_label: "Open Leave Calendar",
+        category: "resignation_accepted",
       })
       .select("id")
       .single();

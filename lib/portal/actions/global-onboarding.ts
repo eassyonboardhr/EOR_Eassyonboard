@@ -20,6 +20,87 @@ function nullable(value: string | null | undefined) {
   return value && value.length > 0 ? value : null;
 }
 
+const employeeOnboardingSteps = [
+  "Personal",
+  "Address",
+  "Emergency",
+  "Identity",
+  "Bank",
+  "Education",
+  "Experience",
+  "Custom Fields",
+  "Documents",
+] as const;
+
+function validEmployeeStep(value: string) {
+  if (!employeeOnboardingSteps.includes(value as (typeof employeeOnboardingSteps)[number])) {
+    throw new Error("Invalid onboarding step.");
+  }
+  return value as (typeof employeeOnboardingSteps)[number];
+}
+
+function completionFromSteps(completedSteps: string[]) {
+  const unique = new Set(completedSteps);
+  return Math.round((unique.size / employeeOnboardingSteps.length) * 100);
+}
+
+async function getLinkedEmployeeForSelfOnboarding(sessionUserId: string) {
+  const supabase = getSupabaseAdmin();
+  const { data: employee } = await supabase
+    .from("employees")
+    .select("id, email, employer_id")
+    .eq("portal_user_id", sessionUserId)
+    .single();
+
+  if (!employee) throw new Error("Employee profile is not linked.");
+  return employee;
+}
+
+async function assertOnboardingEditable(employeeId: string) {
+  const supabase = getSupabaseAdmin();
+  const { data: onboardingStatus } = await supabase
+    .from("employee_onboarding_status")
+    .select("status")
+    .eq("employee_id", employeeId)
+    .maybeSingle();
+  if (onboardingStatus?.status === "Approved") {
+    throw new Error("Approved onboarding records are locked.");
+  }
+}
+
+async function getEmployeeCompanyId(employerId: string) {
+  const supabase = getSupabaseAdmin();
+  const { data: company } = await supabase
+    .from("client_companies")
+    .select("id")
+    .eq("employer_id", employerId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return company?.id;
+}
+
+async function saveOnboardingProgress(employeeId: string, completedStep: string) {
+  const supabase = getSupabaseAdmin();
+  const { data: progress } = await supabase
+    .from("employee_onboarding_progress")
+    .select("completed_steps")
+    .eq("employee_id", employeeId)
+    .maybeSingle();
+  const existing = Array.isArray(progress?.completed_steps)
+    ? progress.completed_steps.map((step) => String(step))
+    : [];
+  const completedSteps = Array.from(new Set([...existing, completedStep]));
+
+  await supabase.from("employee_onboarding_progress").upsert({
+    employee_id: employeeId,
+    completion_percentage: completionFromSteps(completedSteps),
+    current_step: completedStep,
+    completed_steps: completedSteps,
+    last_updated: new Date().toISOString(),
+  }, { onConflict: "employee_id" });
+}
+
 function fileNameSafe(value: string) {
   return value.replace(/[^a-zA-Z0-9._-]/g, "_");
 }
@@ -130,6 +211,38 @@ export async function saveCustomFieldValuesForEntity({
     .upsert(values, { onConflict: "custom_field_id,entity_id" });
 
   if (error) throw new Error(error.message);
+}
+
+async function assertRequiredCustomFieldValues({
+  entityId,
+  targetType,
+  companyId,
+}: {
+  entityId: string;
+  targetType: "employee" | "employer";
+  companyId?: string | null;
+}) {
+  const supabase = getSupabaseAdmin();
+  const requiredFields = (await activeCustomFields(targetType, companyId)).filter((field) => field.required);
+  if (requiredFields.length === 0) return;
+
+  const { data: values, error } = await supabase
+    .from("custom_field_values")
+    .select("custom_field_id, value")
+    .eq("entity_id", entityId)
+    .in("custom_field_id", requiredFields.map((field) => field.id));
+
+  if (error) throw new Error(error.message);
+
+  const existing = new Map((values ?? []).map((row) => [row.custom_field_id, row.value]));
+  const missing = requiredFields.filter((field) => {
+    const value = existing.get(field.id);
+    return value === null || value === undefined || value === "";
+  });
+
+  if (missing.length > 0) {
+    throw new Error(`Complete required custom fields first: ${missing.map((field) => field.field_label).join(", ")}.`);
+  }
 }
 
 export async function saveEmployerOnboardingAction(formData: FormData) {
@@ -287,140 +400,252 @@ export async function reviewClientCompanyAction(formData: FormData) {
   revalidatePath("/dashboard/onboarding");
 }
 
-export async function saveEmployeeSelfOnboardingAction(formData: FormData) {
+export async function saveEmployeeOnboardingStepAction(formData: FormData) {
   const session = await requirePortalRole(["employee"]);
-  const supabase = getSupabaseAdmin();
-  const { data: employee } = await supabase
-    .from("employees")
-    .select("id, email, employer_id")
-    .eq("portal_user_id", session.user.id)
-    .single();
+  const employee = await getLinkedEmployeeForSelfOnboarding(session.user.id);
+  await assertOnboardingEditable(employee.id);
 
-  if (!employee) throw new Error("Employee profile is not linked.");
-  const { data: onboardingStatus } = await supabase
-    .from("employee_onboarding_status")
-    .select("status")
-    .eq("employee_id", employee.id)
-    .maybeSingle();
-  if (onboardingStatus?.status === "Approved") {
-    throw new Error("Approved onboarding records are locked.");
+  const step = validEmployeeStep(requireString(formData, "current_step"));
+  const supabase = getSupabaseAdmin();
+
+  if (step === "Personal") {
+    const parsed = employeeOnboardingSchema.pick({
+      full_name: true,
+      father_name: true,
+      date_of_birth: true,
+      gender: true,
+      email: true,
+      phone: true,
+      alternate_phone: true,
+      linkedin_url: true,
+      github_url: true,
+      portfolio_url: true,
+    }).parse({
+      full_name: requireString(formData, "full_name"),
+      father_name: requireString(formData, "father_name"),
+      date_of_birth: requireString(formData, "date_of_birth"),
+      gender: requireString(formData, "gender"),
+      email: requireString(formData, "email"),
+      phone: requireString(formData, "phone"),
+      alternate_phone: optionalString(formData, "alternate_phone"),
+      linkedin_url: optionalString(formData, "linkedin_url") ?? "",
+      github_url: optionalString(formData, "github_url") ?? "",
+      portfolio_url: optionalString(formData, "portfolio_url") ?? "",
+    });
+
+    await supabase.from("employee_profiles").upsert({
+      employee_id: employee.id,
+      user_id: session.user.id,
+      full_name: parsed.full_name,
+      father_name: parsed.father_name,
+      date_of_birth: parsed.date_of_birth,
+      gender: parsed.gender,
+      email: parsed.email,
+      phone: parsed.phone,
+      alternate_phone: parsed.alternate_phone,
+      linkedin_url: nullable(parsed.linkedin_url),
+      github_url: nullable(parsed.github_url),
+      portfolio_url: nullable(parsed.portfolio_url),
+    }, { onConflict: "employee_id" });
   }
 
-  const parsed = employeeOnboardingSchema.parse({
-    full_name: requireString(formData, "full_name"),
-    father_name: requireString(formData, "father_name"),
-    date_of_birth: requireString(formData, "date_of_birth"),
-    gender: requireString(formData, "gender"),
-    email: requireString(formData, "email"),
-    phone: requireString(formData, "phone"),
-    alternate_phone: optionalString(formData, "alternate_phone"),
-    linkedin_url: optionalString(formData, "linkedin_url") ?? "",
-    github_url: optionalString(formData, "github_url") ?? "",
-    portfolio_url: optionalString(formData, "portfolio_url") ?? "",
-    current_address: requireString(formData, "current_address"),
-    permanent_address: requireString(formData, "permanent_address"),
-    state: requireString(formData, "state"),
-    city: requireString(formData, "city"),
-    postal_code: requireString(formData, "postal_code"),
-    emergency_contact_name: requireString(formData, "emergency_contact_name"),
-    emergency_relationship: requireString(formData, "emergency_relationship"),
-    emergency_phone: requireString(formData, "emergency_phone"),
-    aadhaar_number: requireString(formData, "aadhaar_number"),
-    pan_number: requireString(formData, "pan_number"),
-    passport_number: optionalString(formData, "passport_number"),
-    account_holder_name: requireString(formData, "account_holder_name"),
-    account_number: requireString(formData, "account_number"),
-    ifsc_code: requireString(formData, "ifsc_code"),
-    bank_name: requireString(formData, "bank_name"),
-    branch_name: optionalString(formData, "branch_name"),
-    qualification: requireString(formData, "qualification"),
-    institution: requireString(formData, "institution"),
-    year_of_passing: requireString(formData, "year_of_passing"),
-    is_fresher: booleanValue(formData, "is_fresher"),
-    total_experience: optionalString(formData, "total_experience"),
-    previous_company: optionalString(formData, "previous_company"),
-    previous_designation: optionalString(formData, "previous_designation"),
-  });
+  if (step === "Address") {
+    const parsed = employeeOnboardingSchema.pick({
+      current_address: true,
+      permanent_address: true,
+      state: true,
+      city: true,
+      postal_code: true,
+    }).parse({
+      current_address: requireString(formData, "current_address"),
+      permanent_address: requireString(formData, "permanent_address"),
+      state: requireString(formData, "state"),
+      city: requireString(formData, "city"),
+      postal_code: requireString(formData, "postal_code"),
+    });
+    await supabase.from("employee_addresses").delete().eq("employee_id", employee.id);
+    await supabase.from("employee_addresses").insert({ employee_id: employee.id, ...parsed });
+  }
 
-  await supabase.from("employee_profiles").upsert({
+  if (step === "Emergency") {
+    const parsed = employeeOnboardingSchema.pick({
+      emergency_contact_name: true,
+      emergency_relationship: true,
+      emergency_phone: true,
+    }).parse({
+      emergency_contact_name: requireString(formData, "emergency_contact_name"),
+      emergency_relationship: requireString(formData, "emergency_relationship"),
+      emergency_phone: requireString(formData, "emergency_phone"),
+    });
+    await supabase.from("employee_emergency_contacts").delete().eq("employee_id", employee.id);
+    await supabase.from("employee_emergency_contacts").insert({
+      employee_id: employee.id,
+      contact_name: parsed.emergency_contact_name,
+      relationship: parsed.emergency_relationship,
+      phone: parsed.emergency_phone,
+    });
+  }
+
+  if (step === "Identity") {
+    const parsed = employeeOnboardingSchema.pick({
+      aadhaar_number: true,
+      pan_number: true,
+      passport_number: true,
+    }).parse({
+      aadhaar_number: requireString(formData, "aadhaar_number"),
+      pan_number: requireString(formData, "pan_number"),
+      passport_number: optionalString(formData, "passport_number"),
+    });
+    await supabase.from("employee_identity_details").upsert({
+      employee_id: employee.id,
+      aadhaar_number: parsed.aadhaar_number,
+      pan_number: parsed.pan_number,
+      passport_number: parsed.passport_number,
+    }, { onConflict: "employee_id" });
+  }
+
+  if (step === "Bank") {
+    const parsed = employeeOnboardingSchema.pick({
+      account_holder_name: true,
+      account_number: true,
+      ifsc_code: true,
+      bank_name: true,
+      branch_name: true,
+    }).parse({
+      account_holder_name: requireString(formData, "account_holder_name"),
+      account_number: requireString(formData, "account_number"),
+      ifsc_code: requireString(formData, "ifsc_code"),
+      bank_name: requireString(formData, "bank_name"),
+      branch_name: optionalString(formData, "branch_name"),
+    });
+    await supabase.from("employee_bank_details").upsert({
+      employee_id: employee.id,
+      ...parsed,
+    }, { onConflict: "employee_id" });
+  }
+
+  if (step === "Education") {
+    const parsed = employeeOnboardingSchema.pick({
+      qualification: true,
+      institution: true,
+      year_of_passing: true,
+    }).parse({
+      qualification: requireString(formData, "qualification"),
+      institution: requireString(formData, "institution"),
+      year_of_passing: requireString(formData, "year_of_passing"),
+    });
+    await supabase.from("employee_education").delete().eq("employee_id", employee.id);
+    await supabase.from("employee_education").insert({ employee_id: employee.id, ...parsed });
+  }
+
+  if (step === "Experience") {
+    const parsed = employeeOnboardingSchema.pick({
+      is_fresher: true,
+      total_experience: true,
+      previous_company: true,
+      previous_designation: true,
+    }).parse({
+      is_fresher: booleanValue(formData, "is_fresher"),
+      total_experience: optionalString(formData, "total_experience"),
+      previous_company: optionalString(formData, "previous_company"),
+      previous_designation: optionalString(formData, "previous_designation"),
+    });
+    await supabase.from("employee_experience").upsert({
+      employee_id: employee.id,
+      is_fresher: parsed.is_fresher,
+      total_experience: parsed.is_fresher ? null : parsed.total_experience,
+      previous_company: parsed.is_fresher ? null : parsed.previous_company,
+      previous_designation: parsed.is_fresher ? null : parsed.previous_designation,
+    }, { onConflict: "employee_id" });
+  }
+
+  if (step === "Custom Fields") {
+    await saveCustomFieldValuesForEntity({
+      entityId: employee.id,
+      targetType: "employee",
+      companyId: await getEmployeeCompanyId(employee.employer_id),
+      formData,
+    });
+  }
+
+  if (step === "Documents") {
+    const [{ data: experience }, { data: documents }] = await Promise.all([
+      supabase.from("employee_experience").select("is_fresher").eq("employee_id", employee.id).maybeSingle(),
+      supabase.from("employee_documents").select("id, document_type, file_path, verification_status, uploaded_at").eq("employee_id", employee.id),
+    ]);
+    const checklist = allRequiredDocumentsApproved(
+      (documents ?? []).map((document) => ({ ...document, verification_status: "Approved" })),
+      experience?.is_fresher ?? true,
+    );
+    if (!checklist) {
+      throw new Error("Upload all mandatory documents before completing this step.");
+    }
+  }
+
+  await saveOnboardingProgress(employee.id, step);
+  await supabase.from("employee_onboarding_status").upsert({
     employee_id: employee.id,
-    user_id: session.user.id,
-    full_name: parsed.full_name,
-    father_name: parsed.father_name,
-    date_of_birth: parsed.date_of_birth,
-    gender: parsed.gender,
-    email: parsed.email,
-    phone: parsed.phone,
-    alternate_phone: parsed.alternate_phone,
-    linkedin_url: nullable(parsed.linkedin_url),
-    github_url: nullable(parsed.github_url),
-    portfolio_url: nullable(parsed.portfolio_url),
+    status: "Draft",
   }, { onConflict: "employee_id" });
+  await writeAudit(session.user, "save_employee_onboarding_step", "employee", employee.id, { step });
+  revalidatePath("/dashboard/onboarding");
+}
 
-  await supabase.from("employee_addresses").delete().eq("employee_id", employee.id);
-  await supabase.from("employee_addresses").insert({
-    employee_id: employee.id,
-    current_address: parsed.current_address,
-    permanent_address: parsed.permanent_address,
-    state: parsed.state,
-    city: parsed.city,
-    postal_code: parsed.postal_code,
-  });
+export async function saveEmployeeSelfOnboardingAction() {
+  const session = await requirePortalRole(["employee"]);
+  const supabase = getSupabaseAdmin();
+  const employee = await getLinkedEmployeeForSelfOnboarding(session.user.id);
+  await assertOnboardingEditable(employee.id);
 
-  await supabase.from("employee_emergency_contacts").delete().eq("employee_id", employee.id);
-  await supabase.from("employee_emergency_contacts").insert({
-    employee_id: employee.id,
-    contact_name: parsed.emergency_contact_name,
-    relationship: parsed.emergency_relationship,
-    phone: parsed.emergency_phone,
-  });
+  const [
+    profile,
+    address,
+    emergency,
+    identity,
+    bank,
+    education,
+    experience,
+  ] = await Promise.all([
+    supabase.from("employee_profiles").select("id").eq("employee_id", employee.id).maybeSingle(),
+    supabase.from("employee_addresses").select("id").eq("employee_id", employee.id).maybeSingle(),
+    supabase.from("employee_emergency_contacts").select("id").eq("employee_id", employee.id).maybeSingle(),
+    supabase.from("employee_identity_details").select("id").eq("employee_id", employee.id).maybeSingle(),
+    supabase.from("employee_bank_details").select("id").eq("employee_id", employee.id).maybeSingle(),
+    supabase.from("employee_education").select("id").eq("employee_id", employee.id).maybeSingle(),
+    supabase.from("employee_experience").select("id, is_fresher").eq("employee_id", employee.id).maybeSingle(),
+  ]);
 
-  await supabase.from("employee_identity_details").upsert({
-    employee_id: employee.id,
-    aadhaar_number: parsed.aadhaar_number,
-    pan_number: parsed.pan_number,
-    passport_number: parsed.passport_number,
-  }, { onConflict: "employee_id" });
+  const missingSections = [
+    ["Personal", profile.data],
+    ["Address", address.data],
+    ["Emergency", emergency.data],
+    ["Identity", identity.data],
+    ["Bank", bank.data],
+    ["Education", education.data],
+    ["Experience", experience.data],
+  ].filter(([, row]) => !row).map(([label]) => label);
 
-  await supabase.from("employee_bank_details").upsert({
-    employee_id: employee.id,
-    account_holder_name: parsed.account_holder_name,
-    account_number: parsed.account_number,
-    ifsc_code: parsed.ifsc_code,
-    bank_name: parsed.bank_name,
-    branch_name: parsed.branch_name,
-  }, { onConflict: "employee_id" });
+  if (missingSections.length > 0) {
+    throw new Error(`Complete these onboarding steps first: ${missingSections.join(", ")}.`);
+  }
 
-  await supabase.from("employee_education").delete().eq("employee_id", employee.id);
-  await supabase.from("employee_education").insert({
-    employee_id: employee.id,
-    qualification: parsed.qualification,
-    institution: parsed.institution,
-    year_of_passing: parsed.year_of_passing,
-  });
-
-  await supabase.from("employee_experience").upsert({
-    employee_id: employee.id,
-    is_fresher: parsed.is_fresher,
-    total_experience: parsed.is_fresher ? null : parsed.total_experience,
-    previous_company: parsed.is_fresher ? null : parsed.previous_company,
-    previous_designation: parsed.is_fresher ? null : parsed.previous_designation,
-  }, { onConflict: "employee_id" });
-
-  const { data: company } = await supabase
-    .from("client_companies")
-    .select("id")
-    .eq("employer_id", employee.employer_id)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  await saveCustomFieldValuesForEntity({
+  await assertRequiredCustomFieldValues({
     entityId: employee.id,
     targetType: "employee",
-    companyId: company?.id,
-    formData,
+    companyId: await getEmployeeCompanyId(employee.employer_id),
   });
+
+  const { data: uploadedDocuments } = await supabase
+    .from("employee_documents")
+    .select("id, document_type, file_path, verification_status, uploaded_at")
+    .eq("employee_id", employee.id);
+  const allMandatoryUploaded = allRequiredDocumentsApproved(
+    (uploadedDocuments ?? []).map((document) => ({ ...document, verification_status: "Approved" })),
+    experience.data?.is_fresher ?? true,
+  );
+  if (!allMandatoryUploaded) {
+    throw new Error("Upload all mandatory employee documents before submitting onboarding.");
+  }
 
   const completion = onboardingCompletionPercentage({
     personal: true,
@@ -436,6 +661,7 @@ export async function saveEmployeeSelfOnboardingAction(formData: FormData) {
     employee_id: employee.id,
     completion_percentage: completion,
     current_step: "document_uploads",
+    completed_steps: [...employeeOnboardingSteps],
     last_updated: new Date().toISOString(),
   }, { onConflict: "employee_id" });
 
@@ -514,6 +740,9 @@ export async function reviewEmployeeOnboardingAction(formData: FormData) {
             body: `${employee.full_name} has been verified. Please update their team, manager, leave policy, and notice period details from Employer Onboarding > Employee Setup.`,
             priority: "important",
             requires_acknowledgement: true,
+            action_url: "/dashboard/onboarding",
+            action_label: "Open Employee Setup",
+            category: "employee_verified",
           })
           .select("id")
           .single();
@@ -585,6 +814,37 @@ export async function reviewEmployeeDocumentAction(formData: FormData) {
       },
       { onConflict: "employee_id" },
     );
+
+    const { data: employee } = await supabase
+      .from("employees")
+      .select("portal_user_id, employer_id")
+      .eq("id", document.employee_id)
+      .maybeSingle();
+
+    if (employee?.portal_user_id) {
+      const { data: notice } = await supabase
+        .from("notices")
+        .insert({
+          sender_id: session.user.id,
+          employer_id: employee.employer_id,
+          title: "Document correction required",
+          body: remarks ?? "One of your onboarding documents needs correction. Please review and upload a replacement.",
+          priority: "important",
+          requires_acknowledgement: false,
+          action_url: "/dashboard/onboarding",
+          action_label: "Open Onboarding",
+          category: "document_correction",
+        })
+        .select("id")
+        .single();
+
+      if (notice) {
+        await supabase.from("notice_recipients").insert({
+          notice_id: notice.id,
+          recipient_user_id: employee.portal_user_id,
+        });
+      }
+    }
   }
 
   await writeAudit(session.user, `review_employee_document_${decision}`, "employee_document", documentId);

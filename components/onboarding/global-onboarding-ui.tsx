@@ -8,6 +8,7 @@ import {
   reviewEmployeeDocumentAction,
   reviewEmployeeOnboardingAction,
   saveEmployeeEmployerSetupAction,
+  saveEmployeeOnboardingStepAction,
   saveEmployeeSelfOnboardingAction,
   saveEmployerOnboardingAction,
   uploadCompanyDocumentAction,
@@ -491,7 +492,11 @@ function StepTabs({ active, setActive }: { active: number; setActive: (value: nu
 }
 
 function StepSection({ active, index, children }: { active: number; index: number; children: React.ReactNode }) {
-  return <div className={active === index ? "grid gap-4 md:grid-cols-2" : "hidden"}>{children}</div>;
+  return (
+    <fieldset disabled={active !== index} className={active === index ? "grid gap-4 md:grid-cols-2" : "hidden"}>
+      {children}
+    </fieldset>
+  );
 }
 
 function EmployeeSelfOnboarding({ data }: { data: Row }) {
@@ -500,9 +505,18 @@ function EmployeeSelfOnboarding({ data }: { data: Row }) {
   const customValues = rows(data.customFieldValues);
   const documents = rows(data.documents);
   const checklist = rows(data.documentChecklist);
+  const profile = (data.profile as Row | null) ?? {};
+  const address = (data.address as Row | null) ?? {};
+  const emergency = (data.emergency as Row | null) ?? {};
+  const identity = (data.identity as Row | null) ?? {};
+  const bank = (data.bank as Row | null) ?? {};
+  const education = (data.education as Row | null) ?? {};
+  const experience = (data.experience as Row | null) ?? {};
   const status = data.status as Row | null;
   const progress = data.progress as Row | null;
-  const [activeStep, setActiveStep] = useState(0);
+  const completedSteps = Array.isArray(progress?.completed_steps) ? progress.completed_steps.map((step) => String(step)) : [];
+  const initialStep = Math.max(0, employeeSteps.findIndex((step) => step === progress?.current_step));
+  const [activeStep, setActiveStep] = useState(initialStep);
   if (!employee) {
     return <Panel title="Employee Onboarding">Your employee profile is not linked yet.</Panel>;
   }
@@ -537,58 +551,58 @@ function EmployeeSelfOnboarding({ data }: { data: Row }) {
           </div>
         ) : null}
         <StepTabs active={activeStep} setActive={setActiveStep} />
-        <form action={saveEmployeeSelfOnboardingAction} className="grid gap-4 md:grid-cols-2">
+        <form action={saveEmployeeOnboardingStepAction} className="grid gap-4 md:grid-cols-2">
           <input type="hidden" name="current_step" value={employeeSteps[activeStep]} />
           <fieldset disabled={formLocked} className="contents">
             <StepSection active={activeStep} index={0}>
-              <Field name="full_name" label="Full Name" required defaultValue={String(employee.full_name ?? "")} />
-              <Field name="father_name" label="Father's Name" required />
-              <Field name="date_of_birth" label="Date of Birth" type="date" required />
-              <Field name="gender" label="Gender" required />
-              <Field name="email" label="Email" type="email" required defaultValue={String(employee.email ?? "")} />
-              <Field name="phone" label="Phone Number" required />
-              <Field name="alternate_phone" label="Alternate Phone Number" />
-              <Field name="linkedin_url" label="LinkedIn URL" />
-              <Field name="github_url" label="GitHub URL" />
-              <Field name="portfolio_url" label="Portfolio URL" />
+              <Field name="full_name" label="Full Name" required defaultValue={value(profile, "full_name") || String(employee.full_name ?? "")} />
+              <Field name="father_name" label="Father's Name" required defaultValue={value(profile, "father_name")} />
+              <Field name="date_of_birth" label="Date of Birth" type="date" required defaultValue={value(profile, "date_of_birth")} />
+              <Field name="gender" label="Gender" required defaultValue={value(profile, "gender")} />
+              <Field name="email" label="Email" type="email" required defaultValue={value(profile, "email") || String(employee.email ?? "")} />
+              <Field name="phone" label="Phone Number" required defaultValue={value(profile, "phone")} />
+              <Field name="alternate_phone" label="Alternate Phone Number" defaultValue={value(profile, "alternate_phone")} />
+              <Field name="linkedin_url" label="LinkedIn URL" defaultValue={value(profile, "linkedin_url")} />
+              <Field name="github_url" label="GitHub URL" defaultValue={value(profile, "github_url")} />
+              <Field name="portfolio_url" label="Portfolio URL" defaultValue={value(profile, "portfolio_url")} />
             </StepSection>
             <StepSection active={activeStep} index={1}>
-              <TextArea name="current_address" label="Current Address" required />
-              <TextArea name="permanent_address" label="Permanent Address" required />
-              <Field name="state" label="State" required />
-              <Field name="city" label="City" required />
-              <Field name="postal_code" label="PIN Code" required />
+              <TextArea name="current_address" label="Current Address" required defaultValue={value(address, "current_address")} />
+              <TextArea name="permanent_address" label="Permanent Address" required defaultValue={value(address, "permanent_address")} />
+              <Field name="state" label="State" required defaultValue={value(address, "state")} />
+              <Field name="city" label="City" required defaultValue={value(address, "city")} />
+              <Field name="postal_code" label="PIN Code" required defaultValue={value(address, "postal_code")} />
             </StepSection>
             <StepSection active={activeStep} index={2}>
-              <Field name="emergency_contact_name" label="Emergency Contact Name" required />
-              <Field name="emergency_relationship" label="Relationship" required />
-              <Field name="emergency_phone" label="Emergency Phone" required />
+              <Field name="emergency_contact_name" label="Emergency Contact Name" required defaultValue={value(emergency, "contact_name")} />
+              <Field name="emergency_relationship" label="Relationship" required defaultValue={value(emergency, "relationship")} />
+              <Field name="emergency_phone" label="Emergency Phone" required defaultValue={value(emergency, "phone")} />
             </StepSection>
             <StepSection active={activeStep} index={3}>
-              <Field name="aadhaar_number" label="Aadhaar Number" required />
-              <Field name="pan_number" label="PAN Number" required />
-              <Field name="passport_number" label="Passport Number" />
+              <Field name="aadhaar_number" label="Aadhaar Number" required defaultValue={value(identity, "aadhaar_number")} />
+              <Field name="pan_number" label="PAN Number" required defaultValue={value(identity, "pan_number")} />
+              <Field name="passport_number" label="Passport Number" defaultValue={value(identity, "passport_number")} />
             </StepSection>
             <StepSection active={activeStep} index={4}>
-              <Field name="account_holder_name" label="Account Holder Name" required />
-              <Field name="account_number" label="Account Number" required />
-              <Field name="ifsc_code" label="IFSC Code" required />
-              <Field name="bank_name" label="Bank Name" required />
-              <Field name="branch_name" label="Branch Name" />
+              <Field name="account_holder_name" label="Account Holder Name" required defaultValue={value(bank, "account_holder_name")} />
+              <Field name="account_number" label="Account Number" required defaultValue={value(bank, "account_number")} />
+              <Field name="ifsc_code" label="IFSC Code" required defaultValue={value(bank, "ifsc_code")} />
+              <Field name="bank_name" label="Bank Name" required defaultValue={value(bank, "bank_name")} />
+              <Field name="branch_name" label="Branch Name" defaultValue={value(bank, "branch_name")} />
             </StepSection>
             <StepSection active={activeStep} index={5}>
-              <Field name="qualification" label="Highest Qualification" required />
-              <Field name="institution" label="Institution" required />
-              <Field name="year_of_passing" label="Year of Passing" type="number" required />
+              <Field name="qualification" label="Highest Qualification" required defaultValue={value(education, "qualification")} />
+              <Field name="institution" label="Institution" required defaultValue={value(education, "institution")} />
+              <Field name="year_of_passing" label="Year of Passing" type="number" required defaultValue={value(education, "year_of_passing")} />
             </StepSection>
             <StepSection active={activeStep} index={6}>
               <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                <input type="checkbox" name="is_fresher" defaultChecked />
+                <input type="checkbox" name="is_fresher" defaultChecked={experience.is_fresher !== false} />
                 Fresher
               </label>
-              <Field name="total_experience" label="Total Experience" />
-              <Field name="previous_company" label="Previous Company" />
-              <Field name="previous_designation" label="Previous Designation" />
+              <Field name="total_experience" label="Total Experience" defaultValue={value(experience, "total_experience")} />
+              <Field name="previous_company" label="Previous Company" defaultValue={value(experience, "previous_company")} />
+              <Field name="previous_designation" label="Previous Designation" defaultValue={value(experience, "previous_designation")} />
             </StepSection>
             <StepSection active={activeStep} index={7}>
               <CustomFieldInputs fields={customFields} values={customValues} disabled={formLocked} />
@@ -612,11 +626,19 @@ function EmployeeSelfOnboarding({ data }: { data: Row }) {
             </div>
           </StepSection>
           {!formLocked ? (
-            <div className="md:col-span-2">
-              <Submit>Submit Onboarding</Submit>
+            <div className="md:col-span-2 flex flex-wrap items-center gap-3">
+              <Submit>Save Current Step</Submit>
+              <span className="text-xs text-slate-500">
+                Completed: {completedSteps.length} / {employeeSteps.length}
+              </span>
             </div>
           ) : null}
         </form>
+        {!formLocked ? (
+          <form action={saveEmployeeSelfOnboardingAction} className="mt-4">
+            <Submit>Submit Onboarding For Review</Submit>
+          </form>
+        ) : null}
       </Panel>
       <Panel title="Document Uploads">
         <form action={recordEmployeeDocumentAction} className="grid gap-4 md:grid-cols-3">
@@ -793,7 +815,13 @@ function EmployeeRequestInviteTable({ requests, allowResend = false }: { request
                 <td className="py-3 pr-4">{String(employer?.name ?? "")}</td>
                 <td className="py-3 pr-4"><Badge value={request.status} /></td>
                 <td className="py-3 pr-4 text-xs text-slate-600">
-                  {request.invite_sent_at ? `Sent ${String(request.invite_sent_at).slice(0, 10)}` : "Not sent"}
+                  {request.onboarding_started_at
+                    ? `Onboarding started ${String(request.onboarding_started_at).slice(0, 10)}`
+                    : request.invite_accepted_at
+                      ? `Accepted ${String(request.invite_accepted_at).slice(0, 10)}`
+                      : request.invite_sent_at
+                        ? `Sent ${String(request.invite_sent_at).slice(0, 10)}`
+                        : "Not sent"}
                   {request.invite_error ? <p className="mt-1 font-semibold text-rose-700">{String(request.invite_error)}</p> : null}
                 </td>
                 <td className="py-3 pr-4">

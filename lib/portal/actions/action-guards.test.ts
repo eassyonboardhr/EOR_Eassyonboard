@@ -259,6 +259,10 @@ function createDocumentReviewSupabaseMock() {
         upserts.push({ table: name, payload });
         return query;
       }),
+      maybeSingle: vi.fn(async () => ({
+        data: name === "employees" ? { portal_user_id: null, employer_id: "employer_1" } : null,
+        error: null,
+      })),
       single: vi.fn(async () => ({
         data: name === "employee_documents" ? { id: "doc_1", employee_id: "employee_1" } : { id: "row_1" },
         error: null,
