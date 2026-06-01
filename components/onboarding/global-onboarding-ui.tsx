@@ -2,13 +2,15 @@
 
 import {
   createCustomFieldAction,
-  createTemplateRecordAction,
   recordEmployeeDocumentAction,
   reviewClientCompanyAction,
+  reviewEmployeeDocumentAction,
   reviewEmployeeOnboardingAction,
   saveEmployeeEmployerSetupAction,
   saveEmployeeSelfOnboardingAction,
   saveEmployerOnboardingAction,
+  uploadCompanyDocumentAction,
+  uploadContractTemplateAction,
 } from "@/lib/portal/actions/global-onboarding";
 import { createEmployeeRequestAction } from "@/lib/portal/actions/employee";
 
@@ -17,6 +19,16 @@ type Row = Record<string, unknown>;
 function value(row: Row | null | undefined, key: string) {
   const raw = row?.[key];
   return typeof raw === "string" || typeof raw === "number" ? String(raw) : "";
+}
+
+function rows(value: unknown) {
+  return Array.isArray(value) ? (value as Row[]) : [];
+}
+
+function fieldValue(values: Row[], fieldId: unknown) {
+  const match = values.find((item) => item.custom_field_id === fieldId);
+  const raw = match?.value;
+  return typeof raw === "string" || typeof raw === "number" || typeof raw === "boolean" ? String(raw) : "";
 }
 
 function Field({
@@ -116,7 +128,58 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
   );
 }
 
-function EmployerWizard({ company }: { company?: Row }) {
+function CustomFieldInputs({ fields, values: customValues = [] }: { fields: Row[]; values?: Row[] }) {
+  if (fields.length === 0) return null;
+
+  return (
+    <div className="md:col-span-2 grid gap-4 md:grid-cols-2">
+      {fields.map((field) => {
+        const id = String(field.id);
+        const name = `custom_${id}`;
+        const label = String(field.field_label ?? "Custom field");
+        const required = Boolean(field.required);
+        const defaultValue = fieldValue(customValues, id) || String(field.default_value ?? "");
+        const fieldType = String(field.field_type ?? "text");
+        const fieldOptions = Array.isArray(field.options)
+          ? field.options.map((option) => String(option))
+          : String(field.default_value ?? "")
+              .split(",")
+              .map((option) => option.trim())
+              .filter(Boolean);
+
+        if (fieldType === "textarea") {
+          return <TextArea key={id} name={name} label={label} required={required} defaultValue={defaultValue} />;
+        }
+
+        if (fieldType === "dropdown") {
+          return (
+            <label key={id} className="grid gap-1 text-sm font-medium text-slate-700">
+              {label}
+              <select name={name} required={required} defaultValue={defaultValue} className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm">
+                <option value="">Select</option>
+                {fieldOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+              </select>
+            </label>
+          );
+        }
+
+        if (fieldType === "checkbox") {
+          return (
+            <label key={id} className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+              <input type="checkbox" name={name} defaultChecked={defaultValue === "true"} />
+              {label}
+            </label>
+          );
+        }
+
+        const inputType = ["number", "email", "url", "date"].includes(fieldType) ? fieldType : "text";
+        return <Field key={id} name={name} label={label} type={inputType} required={required} defaultValue={defaultValue} />;
+      })}
+    </div>
+  );
+}
+
+function EmployerWizard({ company, customFields, customValues }: { company?: Row; customFields: Row[]; customValues: Row[] }) {
   return (
     <form action={saveEmployerOnboardingAction} className="grid gap-5">
       {company?.id ? <input type="hidden" name="company_id" value={String(company.id)} /> : null}
@@ -178,6 +241,10 @@ function EmployerWizard({ company }: { company?: Row }) {
             ))}
           </div>
         </div>
+      </Panel>
+      <Panel title="Employer Custom Fields">
+        <CustomFieldInputs fields={customFields} values={customValues} />
+        {customFields.length === 0 ? <p className="text-sm text-slate-500">No employer custom fields configured.</p> : null}
       </Panel>
       <Submit>Save and Submit Employer Onboarding</Submit>
     </form>
@@ -273,7 +340,7 @@ function EmployeeSetupForm({
 
 function TemplateForm({ companies }: { companies: Row[] }) {
   return (
-    <form action={createTemplateRecordAction} className="grid gap-4 md:grid-cols-2">
+    <form action={uploadContractTemplateAction} className="grid gap-4 md:grid-cols-2">
       <Select name="template_type" label="Template Type" options={["offer_letter", "employment_agreement", "nda", "policy_document", "custom_template"]} />
       <Field name="template_name" label="Template Name" required />
       <label className="grid gap-1 text-sm font-medium text-slate-700">
@@ -287,11 +354,62 @@ function TemplateForm({ companies }: { companies: Row[] }) {
           ))}
         </select>
       </label>
-      <Field name="file_path" label="Template Storage Path" required />
+      <label className="grid gap-1 text-sm font-medium text-slate-700">
+        Template File
+        <input name="file" type="file" required className="h-10 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm" />
+      </label>
       <div className="md:col-span-2">
-        <Submit>Save Template Version</Submit>
+        <Submit>Upload Template Version</Submit>
       </div>
     </form>
+  );
+}
+
+function CompanyDocumentForm({ companies }: { companies: Row[] }) {
+  if (companies.length === 0) {
+    return <p className="text-sm text-slate-500">Save employer onboarding first, then upload company documents.</p>;
+  }
+
+  return (
+    <form action={uploadCompanyDocumentAction} className="grid gap-4 md:grid-cols-3">
+      <label className="grid gap-1 text-sm font-medium text-slate-700">
+        Company
+        <select name="company_id" className="h-10 rounded-xl border border-slate-300 px-3 text-sm">
+          {companies.map((company) => (
+            <option key={String(company.id)} value={String(company.id)}>
+              {String(company.company_name ?? "Company")}
+            </option>
+          ))}
+        </select>
+      </label>
+      <Select name="document_type" label="Document Type" options={["incorporation_certificate", "company_logo", "authorized_signatory_id", "supporting_document"]} />
+      <label className="grid gap-1 text-sm font-medium text-slate-700">
+        File
+        <input name="file" type="file" required className="h-10 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm" />
+      </label>
+      <div className="md:col-span-3">
+        <Submit>Upload Company Document</Submit>
+      </div>
+    </form>
+  );
+}
+
+function RecordsList({ title, records }: { title: string; records: Row[] }) {
+  return (
+    <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+      <p className="text-sm font-semibold text-slate-950">{title}</p>
+      <div className="mt-3 grid gap-2">
+        {records.map((record) => (
+          <div key={String(record.id)} className="rounded-lg bg-white p-3 text-xs text-slate-600">
+            <p className="font-semibold text-slate-950">
+              {String(record.document_type ?? record.template_name ?? record.field_label ?? "Record").replaceAll("_", " ")}
+            </p>
+            <p className="mt-1 break-all">{String(record.file_path ?? record.value ?? record.verification_status ?? "")}</p>
+          </div>
+        ))}
+        {records.length === 0 ? <p className="text-sm text-slate-500">No records yet.</p> : null}
+      </div>
+    </div>
   );
 }
 
@@ -305,6 +423,7 @@ function CustomFieldForm({ companies }: { companies: Row[] }) {
       <Field name="placeholder" label="Placeholder" />
       <Field name="help_text" label="Help Text" />
       <Field name="default_value" label="Default Value" />
+      <Field name="options" label="Dropdown Options (comma separated)" />
       <label className="grid gap-1 text-sm font-medium text-slate-700">
         Company
         <select name="company_id" className="h-10 rounded-xl border border-slate-300 px-3 text-sm">
@@ -329,12 +448,35 @@ function CustomFieldForm({ companies }: { companies: Row[] }) {
 
 function EmployeeSelfOnboarding({ data }: { data: Row }) {
   const employee = data.employee as Row | null;
+  const customFields = rows(data.customFields);
+  const customValues = rows(data.customFieldValues);
+  const documents = rows(data.documents);
+  const status = data.status as Row | null;
+  const progress = data.progress as Row | null;
   if (!employee) {
     return <Panel title="Employee Onboarding">Your employee profile is not linked yet.</Panel>;
   }
 
   return (
     <div className="grid gap-5">
+      <div className="grid gap-3 md:grid-cols-4">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Status</p>
+          <p className="mt-2 text-lg font-bold text-slate-950">{String(status?.status ?? "Draft")}</p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Progress</p>
+          <p className="mt-2 text-lg font-bold text-slate-950">{String(progress?.completion_percentage ?? 0)}%</p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Documents</p>
+          <p className="mt-2 text-lg font-bold text-slate-950">{documents.length}</p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Corrections</p>
+          <p className="mt-2 text-lg font-bold text-slate-950">{documents.filter((doc) => doc.verification_status === "Rejected").length}</p>
+        </div>
+      </div>
       <Panel title="Employee Self-Onboarding">
         <form action={saveEmployeeSelfOnboardingAction} className="grid gap-4 md:grid-cols-2">
           <Field name="full_name" label="Full Name" required defaultValue={String(employee.full_name ?? "")} />
@@ -375,6 +517,7 @@ function EmployeeSelfOnboarding({ data }: { data: Row }) {
           <Field name="total_experience" label="Total Experience" />
           <Field name="previous_company" label="Previous Company" />
           <Field name="previous_designation" label="Previous Designation" />
+          <CustomFieldInputs fields={customFields} values={customValues} />
           <div className="md:col-span-2">
             <Submit>Submit Self-Onboarding</Submit>
           </div>
@@ -391,6 +534,18 @@ function EmployeeSelfOnboarding({ data }: { data: Row }) {
             <Submit>Upload Document</Submit>
           </div>
         </form>
+        <div className="mt-5 grid gap-2">
+          {documents.map((document) => (
+            <div key={String(document.id)} className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-sm">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="font-semibold text-slate-950">{String(document.document_type).replaceAll("_", " ")}</p>
+                <Badge value={document.verification_status} />
+              </div>
+              <p className="mt-1 break-all text-xs text-slate-500">{String(document.file_path)}</p>
+              {document.remarks ? <p className="mt-2 text-xs font-medium text-rose-700">{String(document.remarks)}</p> : null}
+            </div>
+          ))}
+        </div>
       </Panel>
     </div>
   );
@@ -450,9 +605,67 @@ function ReviewTable({ rows, type }: { rows: Row[]; type: "company" | "employee"
   );
 }
 
+function EmployeeDocumentReview({ documents }: { documents: Row[] }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[900px] text-left text-sm">
+        <thead className="border-b border-slate-100 text-xs uppercase tracking-[0.12em] text-slate-500">
+          <tr>
+            <th className="py-2 pr-4">Employee</th>
+            <th className="py-2 pr-4">Document</th>
+            <th className="py-2 pr-4">Path</th>
+            <th className="py-2 pr-4">Status</th>
+            <th className="py-2 pr-4">Review</th>
+          </tr>
+        </thead>
+        <tbody>
+          {documents.map((document) => {
+            const employee = document.employees as Row | undefined;
+            const employer = employee?.employers as Row | undefined;
+            return (
+              <tr key={String(document.id)} className="border-b border-slate-100 align-top">
+                <td className="py-3 pr-4">
+                  <p className="font-semibold">{String(employee?.full_name ?? "Employee")}</p>
+                  <p className="text-xs text-slate-500">{String(employer?.name ?? "")}</p>
+                </td>
+                <td className="py-3 pr-4 capitalize">{String(document.document_type).replaceAll("_", " ")}</td>
+                <td className="max-w-xs break-all py-3 pr-4 text-xs text-slate-500">{String(document.file_path)}</td>
+                <td className="py-3 pr-4">
+                  <Badge value={document.verification_status} />
+                  {document.remarks ? <p className="mt-2 text-xs text-slate-500">{String(document.remarks)}</p> : null}
+                </td>
+                <td className="py-3 pr-4">
+                  <div className="grid gap-2">
+                    <form action={reviewEmployeeDocumentAction}>
+                      <input type="hidden" name="document_id" value={String(document.id)} />
+                      <input type="hidden" name="decision" value="Approved" />
+                      <Submit>Approve</Submit>
+                    </form>
+                    <form action={reviewEmployeeDocumentAction} className="flex gap-2">
+                      <input type="hidden" name="document_id" value={String(document.id)} />
+                      <input type="hidden" name="decision" value="Rejected" />
+                      <input name="remarks" placeholder="Correction note" className="h-10 w-40 rounded-xl border border-slate-300 px-3 text-xs" />
+                      <Submit danger>Reject</Submit>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      {documents.length === 0 ? <p className="py-5 text-sm text-slate-500">No employee documents uploaded yet.</p> : null}
+    </div>
+  );
+}
+
 export function GlobalOnboardingView({ data }: { data: Row }) {
   const mode = data.mode;
-  const companies = (data.companies as Row[] | undefined) ?? [];
+  const companies = rows(data.companies);
+  const templates = rows(data.templates);
+  const customFields = rows(data.customFields);
+  const companyDocuments = rows(data.companyDocuments);
+  const customFieldValues = rows(data.customFieldValues);
 
   if (mode === "employee") {
     return <EmployeeSelfOnboarding data={data} />;
@@ -462,9 +675,15 @@ export function GlobalOnboardingView({ data }: { data: Row }) {
     <div className="grid gap-5">
       {mode === "employer" ? (
         <>
-          <EmployerWizard company={companies[0]} />
+          <EmployerWizard company={companies[0]} customFields={rows(data.employerCustomFields)} customValues={customFieldValues} />
           <Panel title="Employer Hiring Request">
             <HiringRequestForm />
+          </Panel>
+          <Panel title="Company Documents">
+            <CompanyDocumentForm companies={companies} />
+            <div className="mt-5">
+              <RecordsList title="Uploaded Company Documents" records={companyDocuments} />
+            </div>
           </Panel>
           <Panel title="Employee Setup After Verification">
             <p className="mb-4 text-sm leading-6 text-slate-600">
@@ -488,6 +707,13 @@ export function GlobalOnboardingView({ data }: { data: Row }) {
           <Panel title="Employee Onboarding Review">
             <ReviewTable rows={(data.employeeStatuses as Row[] | undefined) ?? []} type="employee" />
           </Panel>
+          <Panel title="Employee Document Review">
+            <EmployeeDocumentReview documents={rows(data.employeeDocuments)} />
+          </Panel>
+          <div className="grid gap-5 xl:grid-cols-2">
+            <RecordsList title="Company Documents" records={companyDocuments} />
+            <RecordsList title="Custom Field Values" records={customFieldValues} />
+          </div>
         </>
       ) : null}
 
@@ -508,11 +734,11 @@ export function GlobalOnboardingView({ data }: { data: Row }) {
           </div>
           <div className="rounded-xl bg-slate-50 p-4">
             <p className="text-xs font-semibold text-slate-500">Templates</p>
-            <p className="mt-2 text-2xl font-bold">{((data.templates as Row[] | undefined) ?? []).length}</p>
+            <p className="mt-2 text-2xl font-bold">{templates.length}</p>
           </div>
           <div className="rounded-xl bg-slate-50 p-4">
             <p className="text-xs font-semibold text-slate-500">Custom Fields</p>
-            <p className="mt-2 text-2xl font-bold">{((data.customFields as Row[] | undefined) ?? []).length}</p>
+            <p className="mt-2 text-2xl font-bold">{customFields.length}</p>
           </div>
         </div>
       </Panel>

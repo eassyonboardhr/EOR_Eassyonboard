@@ -756,6 +756,7 @@ export type Database = {
           file_path: string
           id: string
           remarks: string | null
+          replaced_by_document_id: string | null
           uploaded_at: string
           verification_status: string
           verified_at: string | null
@@ -767,6 +768,7 @@ export type Database = {
           file_path: string
           id?: string
           remarks?: string | null
+          replaced_by_document_id?: string | null
           uploaded_at?: string
           verification_status?: string
           verified_at?: string | null
@@ -778,6 +780,7 @@ export type Database = {
           file_path?: string
           id?: string
           remarks?: string | null
+          replaced_by_document_id?: string | null
           uploaded_at?: string
           verification_status?: string
           verified_at?: string | null
@@ -789,6 +792,13 @@ export type Database = {
             columns: ["employee_id"]
             isOneToOne: false
             referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employee_documents_replaced_by_document_id_fkey"
+            columns: ["replaced_by_document_id"]
+            isOneToOne: false
+            referencedRelation: "employee_documents"
             referencedColumns: ["id"]
           },
           {
@@ -1110,6 +1120,7 @@ export type Database = {
           hourly_billing_rate: number | null
           hours_per_week: number
           id: string
+          invite_id: string | null
           invite_sent_at: string | null
           job_title: string | null
           onboarding_notes: string | null
@@ -1135,6 +1146,7 @@ export type Database = {
           hourly_billing_rate?: number | null
           hours_per_week?: number
           id?: string
+          invite_id?: string | null
           invite_sent_at?: string | null
           job_title?: string | null
           onboarding_notes?: string | null
@@ -1160,6 +1172,7 @@ export type Database = {
           hourly_billing_rate?: number | null
           hours_per_week?: number
           id?: string
+          invite_id?: string | null
           invite_sent_at?: string | null
           job_title?: string | null
           onboarding_notes?: string | null

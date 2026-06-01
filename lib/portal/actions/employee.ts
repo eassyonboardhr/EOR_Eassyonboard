@@ -1,11 +1,40 @@
 "use server";
 
+import { clerkClient } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { numberValue, optionalString, requireString } from "@/lib/portal/form";
 import { requirePortalRole } from "@/lib/portal/session";
 import { writeAudit } from "@/lib/portal/actions/audit";
 import { calculateMonthlySalaryFromHourly } from "@/lib/portal/lifecycle-utils";
+
+async function appUrl(path: string) {
+  const configuredOrigin =
+    process.env.NEXT_PUBLIC_APP_URL ??
+    process.env.APP_URL ??
+    process.env.VERCEL_PROJECT_PRODUCTION_URL;
+
+  if (configuredOrigin) {
+    const origin = configuredOrigin.startsWith("http")
+      ? configuredOrigin
+      : `https://${configuredOrigin}`;
+    return new URL(path, origin).toString();
+  }
+
+  const requestHeaders = await headers();
+  const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host");
+
+  if (!host) {
+    throw new Error("Could not determine application URL for invitation.");
+  }
+
+  const proto =
+    requestHeaders.get("x-forwarded-proto") ??
+    (host.startsWith("localhost") || host.startsWith("127.") ? "http" : "https");
+
+  return new URL(path, `${proto}://${host}`).toString();
+}
 
 async function requireEmployerReady(employerId: string) {
   const supabase = getSupabaseAdmin();
@@ -67,7 +96,7 @@ export async function approveEmployeeRequestAction(formData: FormData) {
 
   const { data: request, error } = await supabase
     .from("employee_requests")
-    .select("id, employer_id, email, full_name, job_title, department, proposed_start_date, status, hourly_billing_rate, hours_per_week, billing_currency")
+    .select("id, employer_id, email, full_name, job_title, department, proposed_start_date, status, hourly_billing_rate, hours_per_week, billing_currency, employee_id, invite_sent_at")
     .eq("id", requestId)
     .single();
 
@@ -77,6 +106,10 @@ export async function approveEmployeeRequestAction(formData: FormData) {
 
   if (request.status !== "pending") {
     throw new Error("Employee request already reviewed.");
+  }
+
+  if (request.employee_id) {
+    throw new Error("Employee request already created an employee.");
   }
 
   const { data: employee, error: employeeError } = await supabase
@@ -147,11 +180,27 @@ export async function approveEmployeeRequestAction(formData: FormData) {
     notes: "Initial monthly billing calculated from employer-entered billing per-hour inputs.",
   });
 
+  const clerk = await clerkClient();
+  const invitation = await clerk.invitations.createInvitation({
+    emailAddress: request.email,
+    redirectUrl: await appUrl("/sign-up"),
+    notify: true,
+    ignoreExisting: true,
+    publicMetadata: {
+      portalRole: "employee",
+      employerId: request.employer_id,
+      employeeId: employee.id,
+      source: "admin_approved_employee_request",
+    },
+  });
+
   await supabase
     .from("employee_requests")
     .update({
       status: "approved",
       employee_id: employee.id,
+      invite_id: invitation.id,
+      invite_sent_at: new Date().toISOString(),
       calculated_annual_salary: annualSalary,
       calculated_monthly_salary: monthlySalary,
       reviewed_by: session.user.id,

@@ -98,6 +98,7 @@ export const customFieldSchema = z.object({
   placeholder: z.string().trim().optional().nullable(),
   help_text: z.string().trim().optional().nullable(),
   default_value: z.string().trim().optional().nullable(),
+  options: z.string().trim().optional().nullable(),
 });
 
 export const templateSchema = z.object({

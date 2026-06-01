@@ -1,0 +1,1 @@
+drop index if exists custom_field_values_field_entity_uidx;

@@ -12,6 +12,8 @@ import {
   templateSchema,
 } from "@/lib/portal/global-onboarding-schema";
 import { onboardingCompletionPercentage } from "@/lib/portal/global-onboarding";
+import type { Json } from "@/lib/supabase/database.types";
+import type { PortalRole } from "@/lib/portal/types";
 
 function nullable(value: string | null | undefined) {
   return value && value.length > 0 ? value : null;
@@ -19,6 +21,114 @@ function nullable(value: string | null | undefined) {
 
 function fileNameSafe(value: string) {
   return value.replace(/[^a-zA-Z0-9._-]/g, "_");
+}
+
+type CustomFieldRow = {
+  id: string;
+  field_label: string;
+  field_key: string;
+  field_type: string;
+  required: boolean;
+  default_value: string | null;
+};
+
+function customFieldInputName(field: Pick<CustomFieldRow, "id">) {
+  return `custom_${field.id}`;
+}
+
+function commaOptions(value: string | null | undefined) {
+  return (value ?? "")
+    .split(",")
+    .map((option) => option.trim())
+    .filter(Boolean);
+}
+
+function customFieldValue(field: CustomFieldRow, formData: FormData): Json | null {
+  const name = customFieldInputName(field);
+
+  if (field.field_type === "checkbox") {
+    const checked = formData.has(name);
+    if (field.required && !checked) {
+      throw new Error(`${field.field_label} is required.`);
+    }
+    return checked;
+  }
+
+  const value = optionalString(formData, name) ?? field.default_value;
+  if (field.required && !value) {
+    throw new Error(`${field.field_label} is required.`);
+  }
+
+  if (!value) return null;
+  if (field.field_type === "number") {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) throw new Error(`${field.field_label} must be a number.`);
+    return numeric;
+  }
+
+  if (field.field_type === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+    throw new Error(`${field.field_label} must be a valid email.`);
+  }
+
+  if (field.field_type === "url") {
+    try {
+      new URL(value);
+    } catch {
+      throw new Error(`${field.field_label} must be a valid URL.`);
+    }
+  }
+
+  return value;
+}
+
+async function activeCustomFields(targetType: "employee" | "employer", companyId?: string | null) {
+  const supabase = getSupabaseAdmin();
+  let query = supabase
+    .from("custom_fields")
+    .select("id, field_label, field_key, field_type, required, default_value")
+    .eq("target_type", targetType)
+    .eq("active", true)
+    .order("created_at", { ascending: true });
+
+  if (companyId) {
+    query = query.or(`company_id.is.null,company_id.eq.${companyId}`);
+  } else {
+    query = query.is("company_id", null);
+  }
+
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+  return (data ?? []) as CustomFieldRow[];
+}
+
+export async function saveCustomFieldValuesForEntity({
+  entityId,
+  targetType,
+  companyId,
+  formData,
+}: {
+  entityId: string;
+  targetType: "employee" | "employer";
+  companyId?: string | null;
+  formData: FormData;
+}) {
+  const supabase = getSupabaseAdmin();
+  const fields = await activeCustomFields(targetType, companyId);
+  const values = fields
+    .map((field) => ({
+      custom_field_id: field.id,
+      entity_id: entityId,
+      value: customFieldValue(field, formData),
+    }))
+    .filter((row) => row.value !== null);
+
+  if (values.length === 0) return;
+
+  const { error } = await supabase
+    .from("custom_field_values")
+    .upsert(values, { onConflict: "custom_field_id,entity_id" });
+
+  if (error) throw new Error(error.message);
 }
 
 export async function saveEmployerOnboardingAction(formData: FormData) {
@@ -80,6 +190,12 @@ export async function saveEmployerOnboardingAction(formData: FormData) {
     : await supabase.from("client_companies").insert(companyPayload).select("id").single();
 
   if (error || !company) throw new Error(error?.message ?? "Could not save company onboarding.");
+  await saveCustomFieldValuesForEntity({
+    entityId: company.id,
+    targetType: "employer",
+    companyId: company.id,
+    formData,
+  });
 
   const signatory = parsed.signatory_same_as_primary
     ? {
@@ -175,7 +291,7 @@ export async function saveEmployeeSelfOnboardingAction(formData: FormData) {
   const supabase = getSupabaseAdmin();
   const { data: employee } = await supabase
     .from("employees")
-    .select("id, email")
+    .select("id, email, employer_id")
     .eq("portal_user_id", session.user.id)
     .single();
 
@@ -282,6 +398,21 @@ export async function saveEmployeeSelfOnboardingAction(formData: FormData) {
     previous_designation: parsed.is_fresher ? null : parsed.previous_designation,
   }, { onConflict: "employee_id" });
 
+  const { data: company } = await supabase
+    .from("client_companies")
+    .select("id")
+    .eq("employer_id", employee.employer_id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  await saveCustomFieldValuesForEntity({
+    entityId: employee.id,
+    targetType: "employee",
+    companyId: company?.id,
+    formData,
+  });
+
   const completion = onboardingCompletionPercentage({
     personal: true,
     address: true,
@@ -326,6 +457,17 @@ export async function reviewEmployeeOnboardingAction(formData: FormData) {
   }, { onConflict: "employee_id" });
 
   if (decision === "Approved") {
+    const { data: pendingDocuments } = await supabase
+      .from("employee_documents")
+      .select("id")
+      .eq("employee_id", employeeId)
+      .neq("verification_status", "Approved")
+      .limit(1);
+
+    if ((pendingDocuments ?? []).length > 0) {
+      throw new Error("All uploaded documents must be approved before onboarding approval.");
+    }
+
     const { data: employee } = await supabase
       .from("employees")
       .select("id, full_name, employer_id")
@@ -374,6 +516,54 @@ export async function reviewEmployeeOnboardingAction(formData: FormData) {
   revalidatePath("/dashboard/worktree");
 }
 
+export async function reviewEmployeeDocumentAction(formData: FormData) {
+  const session = await requirePortalRole(["super_admin", "admin"]);
+  const documentId = requireString(formData, "document_id");
+  const decision = requireString(formData, "decision");
+
+  if (!["Approved", "Rejected"].includes(decision)) {
+    throw new Error("Invalid document review decision.");
+  }
+
+  const supabase = getSupabaseAdmin();
+  const { data: document, error } = await supabase
+    .from("employee_documents")
+    .select("id, employee_id")
+    .eq("id", documentId)
+    .single();
+
+  if (error || !document) throw new Error(error?.message ?? "Document not found.");
+
+  const now = new Date().toISOString();
+  const remarks = optionalString(formData, "remarks");
+  await supabase
+    .from("employee_documents")
+    .update({
+      verification_status: decision,
+      remarks,
+      verified_by: session.user.id,
+      verified_at: now,
+    })
+    .eq("id", documentId);
+
+  if (decision === "Rejected") {
+    await supabase.from("employee_onboarding_status").upsert(
+      {
+        employee_id: document.employee_id,
+        status: "Needs Correction",
+        reviewed_by: session.user.id,
+        reviewed_at: now,
+        remarks: remarks ?? "Document correction requested.",
+      },
+      { onConflict: "employee_id" },
+    );
+  }
+
+  await writeAudit(session.user, `review_employee_document_${decision}`, "employee_document", documentId);
+  revalidatePath("/dashboard/onboarding");
+  revalidatePath("/dashboard/worktree");
+}
+
 export async function saveEmployeeEmployerSetupAction(formData: FormData) {
   const session = await requirePortalRole(["employer_admin"]);
   const employeeId = requireString(formData, "employee_id");
@@ -418,12 +608,23 @@ export async function createCustomFieldAction(formData: FormData) {
     placeholder: optionalString(formData, "placeholder"),
     help_text: optionalString(formData, "help_text"),
     default_value: optionalString(formData, "default_value"),
+    options: optionalString(formData, "options"),
   });
   const companyId = optionalString(formData, "company_id");
   const supabase = getSupabaseAdmin();
+  const options = commaOptions(parsed.options);
 
   await supabase.from("custom_fields").insert({
-    ...parsed,
+    target_type: parsed.target_type,
+    field_label: parsed.field_label,
+    field_key: parsed.field_key,
+    field_type: parsed.field_type,
+    required: parsed.required,
+    active: parsed.active,
+    placeholder: parsed.placeholder,
+    help_text: parsed.help_text,
+    default_value: parsed.default_value,
+    options,
     company_id: companyId,
     created_by: session.user.id,
   });
@@ -471,6 +672,117 @@ export async function createTemplateRecordAction(formData: FormData) {
   revalidatePath("/dashboard/onboarding");
 }
 
+async function assertCompanyAccess(companyId: string, role: PortalRole, employerId: string | null) {
+  const supabase = getSupabaseAdmin();
+  const { data: company } = await supabase
+    .from("client_companies")
+    .select("id, employer_id")
+    .eq("id", companyId)
+    .single();
+
+  if (!company) throw new Error("Company not found.");
+  if (!isPlatformAdmin(role) && company.employer_id !== employerId) {
+    throw new Error("Company is outside your employer scope.");
+  }
+}
+
+export async function uploadCompanyDocumentAction(formData: FormData) {
+  const session = await requirePortalRole(["super_admin", "admin", "employer_admin"]);
+  const companyId = requireString(formData, "company_id");
+  const documentType = requireString(formData, "document_type");
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) throw new Error("Company document file is required.");
+
+  await assertCompanyAccess(companyId, session.user.role, session.user.employer_id);
+
+  const supabase = getSupabaseAdmin();
+  const path = `${companyId}/${documentType}/${Date.now()}-${fileNameSafe(file.name)}`;
+  const { error: uploadError } = await supabase.storage
+    .from("company-documents")
+    .upload(path, file, { upsert: false });
+  if (uploadError) throw new Error(uploadError.message);
+
+  const { data, error } = await supabase
+    .from("client_documents")
+    .insert({
+      company_id: companyId,
+      document_type: documentType,
+      file_path: path,
+      uploaded_by: session.user.id,
+    })
+    .select("id")
+    .single();
+
+  if (error || !data) throw new Error(error?.message ?? "Could not record company document.");
+  await writeAudit(session.user, "upload_company_document", "client_document", data.id);
+  revalidatePath("/dashboard/onboarding");
+  revalidatePath("/dashboard/worktree");
+}
+
+export async function uploadContractTemplateAction(formData: FormData) {
+  const session = await requirePortalRole(["super_admin", "admin", "employer_admin"]);
+  const companyId = optionalString(formData, "company_id");
+  const templateType = requireString(formData, "template_type");
+  const templateName = requireString(formData, "template_name");
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) throw new Error("Template file is required.");
+  if (session.user.role === "employer_admin" && !companyId) {
+    throw new Error("Employer templates must be attached to a company.");
+  }
+  if (companyId) await assertCompanyAccess(companyId, session.user.role, session.user.employer_id);
+
+  const parsed = templateSchema.parse({
+    company_id: companyId,
+    template_type: templateType,
+    template_name: templateName,
+    file_path: "uploaded",
+  });
+  const supabase = getSupabaseAdmin();
+  const uploadedByRole = isPlatformAdmin(session.user.role) ? "admin" : "employer";
+  const folder = companyId ?? "global";
+  const path = `${folder}/templates/${parsed.template_type}/${Date.now()}-${fileNameSafe(file.name)}`;
+  const { error: uploadError } = await supabase.storage
+    .from("company-documents")
+    .upload(path, file, { upsert: false });
+  if (uploadError) throw new Error(uploadError.message);
+
+  let latestQuery = supabase
+    .from("contract_templates")
+    .select("version_number")
+    .eq("template_type", parsed.template_type)
+    .order("version_number", { ascending: false })
+    .limit(1);
+  latestQuery = companyId ? latestQuery.eq("company_id", companyId) : latestQuery.is("company_id", null);
+  const { data: latest } = await latestQuery.maybeSingle();
+
+  let deactivateQuery = supabase
+    .from("contract_templates")
+    .update({ is_active: false })
+    .eq("template_type", parsed.template_type);
+  deactivateQuery = companyId ? deactivateQuery.eq("company_id", companyId) : deactivateQuery.is("company_id", null);
+  await deactivateQuery;
+
+  const { data, error } = await supabase
+    .from("contract_templates")
+    .insert({
+      company_id: companyId,
+      template_type: parsed.template_type,
+      template_name: parsed.template_name,
+      file_path: path,
+      uploaded_by_user_id: session.user.id,
+      uploaded_by_role: uploadedByRole,
+      version_number: Number(latest?.version_number ?? 0) + 1,
+      is_active: true,
+    })
+    .select("id")
+    .single();
+
+  if (error || !data) throw new Error(error?.message ?? "Could not save template.");
+  await writeAudit(session.user, "upload_contract_template", "contract_template", data.id);
+  revalidatePath("/dashboard/onboarding");
+  revalidatePath("/dashboard/worktree");
+}
+
 export async function recordEmployeeDocumentAction(formData: FormData) {
   const session = await requirePortalRole(["employee"]);
   const documentType = requireString(formData, "document_type");
@@ -485,11 +797,29 @@ export async function recordEmployeeDocumentAction(formData: FormData) {
   const { error: uploadError } = await supabase.storage.from("employee-documents").upload(path, file, { upsert: false });
   if (uploadError) throw new Error(uploadError.message);
 
-  await supabase.from("employee_documents").insert({
+  const { data: previous } = await supabase
+    .from("employee_documents")
+    .select("id")
+    .eq("employee_id", employee.id)
+    .eq("document_type", documentType)
+    .eq("verification_status", "Rejected")
+    .is("replaced_by_document_id", null)
+    .order("uploaded_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const { data: created } = await supabase.from("employee_documents").insert({
     employee_id: employee.id,
     document_type: documentType,
     file_path: path,
-  });
+  }).select("id").single();
+
+  if (previous && created) {
+    await supabase
+      .from("employee_documents")
+      .update({ replaced_by_document_id: created.id })
+      .eq("id", previous.id);
+  }
 
   revalidatePath("/dashboard/onboarding");
 }

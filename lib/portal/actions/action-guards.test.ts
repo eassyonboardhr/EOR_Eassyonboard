@@ -176,6 +176,145 @@ function createTargetedNoticeSupabaseMock({
   };
 }
 
+function createApproveEmployeeRequestSupabaseMock() {
+  const inserts: Array<{ table: string; payload: unknown }> = [];
+  const updates: Array<{ table: string; payload: Record<string, unknown> }> = [];
+
+  const table = (name: string) => {
+    const query = {
+      select: vi.fn(() => query),
+      eq: vi.fn(() => query),
+      order: vi.fn(() => query),
+      limit: vi.fn(() => query),
+      maybeSingle: vi.fn(async () => ({
+        data:
+          name === "leave_policies"
+            ? { casual_leave: 7, sick_leave: 7, earned_leave: 6 }
+            : null,
+        error: null,
+      })),
+      insert: vi.fn((payload: unknown) => {
+        inserts.push({ table: name, payload });
+        return query;
+      }),
+      update: vi.fn((payload: Record<string, unknown>) => {
+        updates.push({ table: name, payload });
+        return query;
+      }),
+      single: vi.fn(async () => {
+        if (name === "employee_requests") {
+          return {
+            data: {
+              id: "request_1",
+              employer_id: "employer_1",
+              email: "new.employee@example.com",
+              full_name: "New Employee",
+              job_title: "Analyst",
+              department: "Ops",
+              proposed_start_date: "2026-06-01",
+              status: "pending",
+              hourly_billing_rate: 25,
+              hours_per_week: 40,
+              billing_currency: "USD",
+              employee_id: null,
+              invite_sent_at: null,
+            },
+            error: null,
+          };
+        }
+
+        if (name === "employees") {
+          return { data: { id: "employee_1" }, error: null };
+        }
+
+        return { data: { id: `${name}_1` }, error: null };
+      }),
+    };
+
+    return query;
+  };
+
+  return {
+    inserts,
+    updates,
+    client: {
+      from: vi.fn(table),
+    },
+  };
+}
+
+function createDocumentReviewSupabaseMock() {
+  const updates: Array<{ table: string; payload: Record<string, unknown> }> = [];
+  const upserts: Array<{ table: string; payload: Record<string, unknown> }> = [];
+
+  const table = (name: string) => {
+    const query = {
+      select: vi.fn(() => query),
+      eq: vi.fn(() => query),
+      update: vi.fn((payload: Record<string, unknown>) => {
+        updates.push({ table: name, payload });
+        return query;
+      }),
+      upsert: vi.fn((payload: Record<string, unknown>) => {
+        upserts.push({ table: name, payload });
+        return query;
+      }),
+      single: vi.fn(async () => ({
+        data: name === "employee_documents" ? { id: "doc_1", employee_id: "employee_1" } : { id: "row_1" },
+        error: null,
+      })),
+    };
+
+    return query;
+  };
+
+  return {
+    updates,
+    upserts,
+    client: {
+      from: vi.fn(table),
+    },
+  };
+}
+
+function createCustomFieldSupabaseMock() {
+  const upserts: Array<{ table: string; payload: unknown }> = [];
+  const requiredField = {
+    id: "field_1",
+    field_label: "T-Shirt Size",
+    field_key: "tshirt_size",
+    field_type: "text",
+    required: true,
+    default_value: null,
+  };
+
+  const table = (name: string) => {
+    const query = {
+      select: vi.fn(() => query),
+      eq: vi.fn(() => query),
+      is: vi.fn(() => query),
+      order: vi.fn(() => query),
+      upsert: vi.fn((payload: unknown) => {
+        upserts.push({ table: name, payload });
+        return Promise.resolve({ error: null });
+      }),
+      maybeSingle: vi.fn(async () => ({ data: null, error: null })),
+      then: name === "custom_fields"
+        ? vi.fn((resolve) => Promise.resolve({ data: [requiredField], error: null }).then(resolve))
+        : undefined,
+    };
+
+    return query;
+  };
+
+  return {
+    upserts,
+    client: {
+      from: vi.fn(table),
+    },
+  };
+}
+
 beforeEach(() => {
   getPortalSession.mockResolvedValue(session);
   requirePortalRole.mockResolvedValue(session);
@@ -406,5 +545,91 @@ describe("admin-created employer invitations", () => {
         }),
       }),
     );
+  });
+});
+
+describe("onboarding core actions", () => {
+  test("admin approval creates employee records and sends a Clerk employee invitation", async () => {
+    const activeSession = {
+      ...session,
+      user: { ...session.user, status: "active" },
+    };
+    requirePortalRole.mockResolvedValue(activeSession);
+    const supabase = createApproveEmployeeRequestSupabaseMock();
+    getSupabaseAdmin.mockReturnValue(supabase.client);
+    const { approveEmployeeRequestAction } = await import(
+      "@/lib/portal/actions/employee"
+    );
+
+    await approveEmployeeRequestAction(form({ request_id: "request_1" }));
+
+    expect(createInvitation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        emailAddress: "new.employee@example.com",
+        redirectUrl: "http://localhost:3000/sign-up",
+        publicMetadata: expect.objectContaining({
+          portalRole: "employee",
+          employeeId: "employee_1",
+        }),
+      }),
+    );
+    expect(supabase.updates).toContainEqual({
+      table: "employee_requests",
+      payload: expect.objectContaining({
+        status: "approved",
+        employee_id: "employee_1",
+        invite_id: "invitation_1",
+      }),
+    });
+  });
+
+  test("document rejection marks employee onboarding as needs correction", async () => {
+    const activeSession = {
+      ...session,
+      user: { ...session.user, status: "active" },
+    };
+    requirePortalRole.mockResolvedValue(activeSession);
+    const supabase = createDocumentReviewSupabaseMock();
+    getSupabaseAdmin.mockReturnValue(supabase.client);
+    const { reviewEmployeeDocumentAction } = await import(
+      "@/lib/portal/actions/global-onboarding"
+    );
+
+    await reviewEmployeeDocumentAction(
+      form({ document_id: "doc_1", decision: "Rejected", remarks: "Upload a clearer copy." }),
+    );
+
+    expect(supabase.updates).toContainEqual({
+      table: "employee_documents",
+      payload: expect.objectContaining({
+        verification_status: "Rejected",
+        remarks: "Upload a clearer copy.",
+      }),
+    });
+    expect(supabase.upserts).toContainEqual({
+      table: "employee_onboarding_status",
+      payload: expect.objectContaining({
+        employee_id: "employee_1",
+        status: "Needs Correction",
+      }),
+    });
+  });
+
+  test("required custom fields are validated before values are saved", async () => {
+    const supabase = createCustomFieldSupabaseMock();
+    getSupabaseAdmin.mockReturnValue(supabase.client);
+    const { saveCustomFieldValuesForEntity } = await import(
+      "@/lib/portal/actions/global-onboarding"
+    );
+
+    await expect(
+      saveCustomFieldValuesForEntity({
+        entityId: "employee_1",
+        targetType: "employee",
+        formData: form({}),
+      }),
+    ).rejects.toThrow("T-Shirt Size is required");
+
+    expect(supabase.upserts).toEqual([]);
   });
 });
