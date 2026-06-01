@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import {
   createCustomFieldAction,
   recordEmployeeDocumentAction,
@@ -12,7 +13,7 @@ import {
   uploadCompanyDocumentAction,
   uploadContractTemplateAction,
 } from "@/lib/portal/actions/global-onboarding";
-import { createEmployeeRequestAction } from "@/lib/portal/actions/employee";
+import { createEmployeeRequestAction, resendEmployeeInviteAction } from "@/lib/portal/actions/employee";
 
 type Row = Record<string, unknown>;
 
@@ -37,12 +38,14 @@ function Field({
   type = "text",
   required,
   defaultValue,
+  disabled,
 }: {
   name: string;
   label: string;
   type?: string;
   required?: boolean;
   defaultValue?: string | number;
+  disabled?: boolean;
 }) {
   return (
     <label className="grid gap-1 text-sm font-medium text-slate-700">
@@ -52,13 +55,14 @@ function Field({
         type={type}
         required={required}
         defaultValue={defaultValue}
+        disabled={disabled}
         className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
       />
     </label>
   );
 }
 
-function TextArea({ name, label, required, defaultValue }: { name: string; label: string; required?: boolean; defaultValue?: string }) {
+function TextArea({ name, label, required, defaultValue, disabled }: { name: string; label: string; required?: boolean; defaultValue?: string; disabled?: boolean }) {
   return (
     <label className="grid gap-1 text-sm font-medium text-slate-700">
       {label}
@@ -66,6 +70,7 @@ function TextArea({ name, label, required, defaultValue }: { name: string; label
         name={name}
         required={required}
         defaultValue={defaultValue}
+        disabled={disabled}
         rows={3}
         className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
       />
@@ -128,7 +133,7 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
   );
 }
 
-function CustomFieldInputs({ fields, values: customValues = [] }: { fields: Row[]; values?: Row[] }) {
+function CustomFieldInputs({ fields, values: customValues = [], disabled = false }: { fields: Row[]; values?: Row[]; disabled?: boolean }) {
   if (fields.length === 0) return null;
 
   return (
@@ -148,14 +153,14 @@ function CustomFieldInputs({ fields, values: customValues = [] }: { fields: Row[
               .filter(Boolean);
 
         if (fieldType === "textarea") {
-          return <TextArea key={id} name={name} label={label} required={required} defaultValue={defaultValue} />;
+          return <TextArea key={id} name={name} label={label} required={required} defaultValue={defaultValue} disabled={disabled} />;
         }
 
         if (fieldType === "dropdown") {
           return (
             <label key={id} className="grid gap-1 text-sm font-medium text-slate-700">
               {label}
-              <select name={name} required={required} defaultValue={defaultValue} className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm">
+              <select name={name} required={required} defaultValue={defaultValue} disabled={disabled} className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm">
                 <option value="">Select</option>
                 {fieldOptions.map((option) => <option key={option} value={option}>{option}</option>)}
               </select>
@@ -166,14 +171,14 @@ function CustomFieldInputs({ fields, values: customValues = [] }: { fields: Row[
         if (fieldType === "checkbox") {
           return (
             <label key={id} className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-              <input type="checkbox" name={name} defaultChecked={defaultValue === "true"} />
+              <input type="checkbox" name={name} defaultChecked={defaultValue === "true"} disabled={disabled} />
               {label}
             </label>
           );
         }
 
         const inputType = ["number", "email", "url", "date"].includes(fieldType) ? fieldType : "text";
-        return <Field key={id} name={name} label={label} type={inputType} required={required} defaultValue={defaultValue} />;
+        return <Field key={id} name={name} label={label} type={inputType} required={required} defaultValue={defaultValue} disabled={disabled} />;
       })}
     </div>
   );
@@ -404,7 +409,13 @@ function RecordsList({ title, records }: { title: string; records: Row[] }) {
             <p className="font-semibold text-slate-950">
               {String(record.document_type ?? record.template_name ?? record.field_label ?? "Record").replaceAll("_", " ")}
             </p>
-            <p className="mt-1 break-all">{String(record.file_path ?? record.value ?? record.verification_status ?? "")}</p>
+            {record.signed_url ? (
+              <a href={String(record.signed_url)} target="_blank" rel="noreferrer" className="mt-1 inline-flex font-semibold text-blue-700">
+                View / Download
+              </a>
+            ) : (
+              <p className="mt-1 break-all">{String(record.file_path ?? record.value ?? record.verification_status ?? "")}</p>
+            )}
           </div>
         ))}
         {records.length === 0 ? <p className="text-sm text-slate-500">No records yet.</p> : null}
@@ -446,16 +457,58 @@ function CustomFieldForm({ companies }: { companies: Row[] }) {
   );
 }
 
+const employeeSteps = [
+  "Personal",
+  "Address",
+  "Emergency",
+  "Identity",
+  "Bank",
+  "Education",
+  "Experience",
+  "Custom Fields",
+  "Documents",
+];
+
+function StepTabs({ active, setActive }: { active: number; setActive: (value: number) => void }) {
+  return (
+    <div className="flex gap-2 overflow-x-auto pb-1">
+      {employeeSteps.map((step, index) => (
+        <button
+          key={step}
+          type="button"
+          onClick={() => setActive(index)}
+          className={`shrink-0 rounded-xl border px-3 py-2 text-xs font-bold transition ${
+            active === index
+              ? "border-blue-200 bg-blue-700 text-white"
+              : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+          }`}
+        >
+          {index + 1}. {step}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function StepSection({ active, index, children }: { active: number; index: number; children: React.ReactNode }) {
+  return <div className={active === index ? "grid gap-4 md:grid-cols-2" : "hidden"}>{children}</div>;
+}
+
 function EmployeeSelfOnboarding({ data }: { data: Row }) {
   const employee = data.employee as Row | null;
   const customFields = rows(data.customFields);
   const customValues = rows(data.customFieldValues);
   const documents = rows(data.documents);
+  const checklist = rows(data.documentChecklist);
   const status = data.status as Row | null;
   const progress = data.progress as Row | null;
+  const [activeStep, setActiveStep] = useState(0);
   if (!employee) {
     return <Panel title="Employee Onboarding">Your employee profile is not linked yet.</Panel>;
   }
+  const statusText = String(status?.status ?? "Draft");
+  const formLocked = statusText === "Approved";
+  const missingDocuments = checklist.filter((item) => !item.approved);
 
   return (
     <div className="grid gap-5">
@@ -478,49 +531,91 @@ function EmployeeSelfOnboarding({ data }: { data: Row }) {
         </div>
       </div>
       <Panel title="Employee Self-Onboarding">
+        {formLocked ? (
+          <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-semibold text-emerald-800">
+            Your onboarding is approved. Profile fields are locked; rejected document replacements remain available if requested later.
+          </div>
+        ) : null}
+        <StepTabs active={activeStep} setActive={setActiveStep} />
         <form action={saveEmployeeSelfOnboardingAction} className="grid gap-4 md:grid-cols-2">
-          <Field name="full_name" label="Full Name" required defaultValue={String(employee.full_name ?? "")} />
-          <Field name="father_name" label="Father's Name" required />
-          <Field name="date_of_birth" label="Date of Birth" type="date" required />
-          <Field name="gender" label="Gender" required />
-          <Field name="email" label="Email" type="email" required defaultValue={String(employee.email ?? "")} />
-          <Field name="phone" label="Phone Number" required />
-          <Field name="alternate_phone" label="Alternate Phone Number" />
-          <Field name="linkedin_url" label="LinkedIn URL" />
-          <Field name="github_url" label="GitHub URL" />
-          <Field name="portfolio_url" label="Portfolio URL" />
-          <div className="md:col-span-2 grid gap-4 md:grid-cols-2">
-            <TextArea name="current_address" label="Current Address" required />
-            <TextArea name="permanent_address" label="Permanent Address" required />
-          </div>
-          <Field name="state" label="State" required />
-          <Field name="city" label="City" required />
-          <Field name="postal_code" label="PIN Code" required />
-          <Field name="emergency_contact_name" label="Emergency Contact Name" required />
-          <Field name="emergency_relationship" label="Relationship" required />
-          <Field name="emergency_phone" label="Emergency Phone" required />
-          <Field name="aadhaar_number" label="Aadhaar Number" required />
-          <Field name="pan_number" label="PAN Number" required />
-          <Field name="passport_number" label="Passport Number" />
-          <Field name="account_holder_name" label="Account Holder Name" required />
-          <Field name="account_number" label="Account Number" required />
-          <Field name="ifsc_code" label="IFSC Code" required />
-          <Field name="bank_name" label="Bank Name" required />
-          <Field name="branch_name" label="Branch Name" />
-          <Field name="qualification" label="Highest Qualification" required />
-          <Field name="institution" label="Institution" required />
-          <Field name="year_of_passing" label="Year of Passing" type="number" required />
-          <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-            <input type="checkbox" name="is_fresher" defaultChecked />
-            Fresher
-          </label>
-          <Field name="total_experience" label="Total Experience" />
-          <Field name="previous_company" label="Previous Company" />
-          <Field name="previous_designation" label="Previous Designation" />
-          <CustomFieldInputs fields={customFields} values={customValues} />
-          <div className="md:col-span-2">
-            <Submit>Submit Self-Onboarding</Submit>
-          </div>
+          <input type="hidden" name="current_step" value={employeeSteps[activeStep]} />
+          <fieldset disabled={formLocked} className="contents">
+            <StepSection active={activeStep} index={0}>
+              <Field name="full_name" label="Full Name" required defaultValue={String(employee.full_name ?? "")} />
+              <Field name="father_name" label="Father's Name" required />
+              <Field name="date_of_birth" label="Date of Birth" type="date" required />
+              <Field name="gender" label="Gender" required />
+              <Field name="email" label="Email" type="email" required defaultValue={String(employee.email ?? "")} />
+              <Field name="phone" label="Phone Number" required />
+              <Field name="alternate_phone" label="Alternate Phone Number" />
+              <Field name="linkedin_url" label="LinkedIn URL" />
+              <Field name="github_url" label="GitHub URL" />
+              <Field name="portfolio_url" label="Portfolio URL" />
+            </StepSection>
+            <StepSection active={activeStep} index={1}>
+              <TextArea name="current_address" label="Current Address" required />
+              <TextArea name="permanent_address" label="Permanent Address" required />
+              <Field name="state" label="State" required />
+              <Field name="city" label="City" required />
+              <Field name="postal_code" label="PIN Code" required />
+            </StepSection>
+            <StepSection active={activeStep} index={2}>
+              <Field name="emergency_contact_name" label="Emergency Contact Name" required />
+              <Field name="emergency_relationship" label="Relationship" required />
+              <Field name="emergency_phone" label="Emergency Phone" required />
+            </StepSection>
+            <StepSection active={activeStep} index={3}>
+              <Field name="aadhaar_number" label="Aadhaar Number" required />
+              <Field name="pan_number" label="PAN Number" required />
+              <Field name="passport_number" label="Passport Number" />
+            </StepSection>
+            <StepSection active={activeStep} index={4}>
+              <Field name="account_holder_name" label="Account Holder Name" required />
+              <Field name="account_number" label="Account Number" required />
+              <Field name="ifsc_code" label="IFSC Code" required />
+              <Field name="bank_name" label="Bank Name" required />
+              <Field name="branch_name" label="Branch Name" />
+            </StepSection>
+            <StepSection active={activeStep} index={5}>
+              <Field name="qualification" label="Highest Qualification" required />
+              <Field name="institution" label="Institution" required />
+              <Field name="year_of_passing" label="Year of Passing" type="number" required />
+            </StepSection>
+            <StepSection active={activeStep} index={6}>
+              <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                <input type="checkbox" name="is_fresher" defaultChecked />
+                Fresher
+              </label>
+              <Field name="total_experience" label="Total Experience" />
+              <Field name="previous_company" label="Previous Company" />
+              <Field name="previous_designation" label="Previous Designation" />
+            </StepSection>
+            <StepSection active={activeStep} index={7}>
+              <CustomFieldInputs fields={customFields} values={customValues} disabled={formLocked} />
+              {customFields.length === 0 ? <p className="text-sm text-slate-500">No custom fields assigned.</p> : null}
+            </StepSection>
+          </fieldset>
+          <StepSection active={activeStep} index={8}>
+            <div className="md:col-span-2 rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-sm font-semibold text-slate-950">Mandatory document checklist</p>
+              <div className="mt-3 grid gap-2 md:grid-cols-2">
+                {checklist.map((item) => (
+                  <div key={String(item.document_type)} className="flex items-center justify-between rounded-lg bg-white px-3 py-2 text-sm">
+                    <span className="capitalize">{String(item.document_type).replaceAll("_", " ")}</span>
+                    <Badge value={item.status} />
+                  </div>
+                ))}
+              </div>
+              {missingDocuments.length > 0 ? (
+                <p className="mt-3 text-xs font-semibold text-amber-700">{missingDocuments.length} required document(s) still need approval.</p>
+              ) : null}
+            </div>
+          </StepSection>
+          {!formLocked ? (
+            <div className="md:col-span-2">
+              <Submit>Submit Onboarding</Submit>
+            </div>
+          ) : null}
         </form>
       </Panel>
       <Panel title="Document Uploads">
@@ -541,7 +636,14 @@ function EmployeeSelfOnboarding({ data }: { data: Row }) {
                 <p className="font-semibold text-slate-950">{String(document.document_type).replaceAll("_", " ")}</p>
                 <Badge value={document.verification_status} />
               </div>
-              <p className="mt-1 break-all text-xs text-slate-500">{String(document.file_path)}</p>
+              {document.signed_url ? (
+                <a href={String(document.signed_url)} target="_blank" rel="noreferrer" className="mt-1 inline-flex text-xs font-semibold text-blue-700">
+                  View / Download
+                </a>
+              ) : (
+                <p className="mt-1 break-all text-xs text-slate-500">{String(document.file_path)}</p>
+              )}
+              {document.replaced_by_document_id ? <p className="mt-2 text-xs text-slate-500">Replaced by a newer upload.</p> : null}
               {document.remarks ? <p className="mt-2 text-xs font-medium text-rose-700">{String(document.remarks)}</p> : null}
             </div>
           ))}
@@ -579,6 +681,7 @@ function ReviewTable({ rows, type }: { rows: Row[]; type: "company" | "employee"
                         <form key={decision} action={reviewClientCompanyAction}>
                           <input type="hidden" name="company_id" value={String(row.id)} />
                           <input type="hidden" name="decision" value={decision} />
+                          <input name="review_remarks" placeholder="Remarks" className="h-10 w-32 rounded-xl border border-slate-300 px-3 text-xs" />
                           <Submit danger={decision === "rejected"}>{decision.replace("_", " ")}</Submit>
                         </form>
                       ))}
@@ -589,6 +692,7 @@ function ReviewTable({ rows, type }: { rows: Row[]; type: "company" | "employee"
                         <form key={decision} action={reviewEmployeeOnboardingAction}>
                           <input type="hidden" name="employee_id" value={String(row.employee_id)} />
                           <input type="hidden" name="decision" value={decision} />
+                          <input name="remarks" placeholder="Remarks" className="h-10 w-32 rounded-xl border border-slate-300 px-3 text-xs" />
                           <Submit danger={decision === "Rejected"}>{decision}</Submit>
                         </form>
                       ))}
@@ -629,7 +733,12 @@ function EmployeeDocumentReview({ documents }: { documents: Row[] }) {
                   <p className="text-xs text-slate-500">{String(employer?.name ?? "")}</p>
                 </td>
                 <td className="py-3 pr-4 capitalize">{String(document.document_type).replaceAll("_", " ")}</td>
-                <td className="max-w-xs break-all py-3 pr-4 text-xs text-slate-500">{String(document.file_path)}</td>
+                <td className="max-w-xs break-all py-3 pr-4 text-xs text-slate-500">
+                  {document.signed_url ? (
+                    <a href={String(document.signed_url)} target="_blank" rel="noreferrer" className="font-semibold text-blue-700">View / Download</a>
+                  ) : String(document.file_path)}
+                  {document.replaced_by_document_id ? <p className="mt-1 text-slate-400">Replaced by newer upload</p> : null}
+                </td>
                 <td className="py-3 pr-4">
                   <Badge value={document.verification_status} />
                   {document.remarks ? <p className="mt-2 text-xs text-slate-500">{String(document.remarks)}</p> : null}
@@ -659,6 +768,91 @@ function EmployeeDocumentReview({ documents }: { documents: Row[] }) {
   );
 }
 
+function EmployeeRequestInviteTable({ requests, allowResend = false }: { requests: Row[]; allowResend?: boolean }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[900px] text-left text-sm">
+        <thead className="border-b border-slate-100 text-xs uppercase tracking-[0.12em] text-slate-500">
+          <tr>
+            <th className="py-2 pr-4">Candidate</th>
+            <th className="py-2 pr-4">Employer</th>
+            <th className="py-2 pr-4">Request</th>
+            <th className="py-2 pr-4">Invite</th>
+            <th className="py-2 pr-4">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {requests.map((request) => {
+            const employer = request.employers as Row | undefined;
+            return (
+              <tr key={String(request.id)} className="border-b border-slate-100 align-top">
+                <td className="py-3 pr-4">
+                  <p className="font-semibold">{String(request.full_name ?? "Candidate")}</p>
+                  <p className="text-xs text-slate-500">{String(request.email ?? "")}</p>
+                </td>
+                <td className="py-3 pr-4">{String(employer?.name ?? "")}</td>
+                <td className="py-3 pr-4"><Badge value={request.status} /></td>
+                <td className="py-3 pr-4 text-xs text-slate-600">
+                  {request.invite_sent_at ? `Sent ${String(request.invite_sent_at).slice(0, 10)}` : "Not sent"}
+                  {request.invite_error ? <p className="mt-1 font-semibold text-rose-700">{String(request.invite_error)}</p> : null}
+                </td>
+                <td className="py-3 pr-4">
+                  {allowResend && request.status === "approved" && request.employee_id ? (
+                    <form action={resendEmployeeInviteAction}>
+                      <input type="hidden" name="request_id" value={String(request.id)} />
+                      <Submit>Resend Invite</Submit>
+                    </form>
+                  ) : null}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      {requests.length === 0 ? <p className="py-5 text-sm text-slate-500">No employee requests found.</p> : null}
+    </div>
+  );
+}
+
+function AdminFilters({ data }: { data: Row }) {
+  const employers = rows(data.employers);
+  const filters = (data.filters as Row | undefined) ?? {};
+  return (
+    <form className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:grid-cols-4">
+      <label className="grid gap-1 text-sm font-medium text-slate-700">
+        Employer
+        <select name="employer" defaultValue={String(filters.employer ?? "all")} className="h-10 rounded-xl border border-slate-300 px-3">
+          <option value="all">All employers</option>
+          {employers.map((employer) => <option key={String(employer.id)} value={String(employer.id)}>{String(employer.name)}</option>)}
+        </select>
+      </label>
+      <Select name="status" label="Onboarding Status" options={["all", "submitted", "approved", "needs_correction", "rejected", "Approved", "Needs Correction", "Rejected"]} defaultValue={String(filters.status ?? "all")} />
+      <Select name="document_status" label="Document Status" options={["all", "Pending", "Approved", "Rejected"]} defaultValue={String(filters.documentStatus ?? "all")} />
+      <div className="pt-6">
+        <Submit>Filter</Submit>
+      </div>
+    </form>
+  );
+}
+
+function AdminTabs({ active, setActive }: { active: string; setActive: (value: string) => void }) {
+  const tabs = ["Company Review", "Employee Review", "Document Review", "Corrections", "Templates", "Custom Fields"];
+  return (
+    <div className="flex gap-2 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
+      {tabs.map((tab) => (
+        <button
+          key={tab}
+          type="button"
+          onClick={() => setActive(tab)}
+          className={`shrink-0 rounded-xl px-3 py-2 text-xs font-bold ${active === tab ? "bg-blue-700 text-white" : "text-slate-600 hover:bg-slate-50"}`}
+        >
+          {tab}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function GlobalOnboardingView({ data }: { data: Row }) {
   const mode = data.mode;
   const companies = rows(data.companies);
@@ -666,6 +860,7 @@ export function GlobalOnboardingView({ data }: { data: Row }) {
   const customFields = rows(data.customFields);
   const companyDocuments = rows(data.companyDocuments);
   const customFieldValues = rows(data.customFieldValues);
+  const [adminTab, setAdminTab] = useState("Company Review");
 
   if (mode === "employee") {
     return <EmployeeSelfOnboarding data={data} />;
@@ -701,30 +896,58 @@ export function GlobalOnboardingView({ data }: { data: Row }) {
 
       {mode === "admin" ? (
         <>
-          <Panel title="Client Company Review">
-            <ReviewTable rows={companies} type="company" />
-          </Panel>
-          <Panel title="Employee Onboarding Review">
-            <ReviewTable rows={(data.employeeStatuses as Row[] | undefined) ?? []} type="employee" />
-          </Panel>
-          <Panel title="Employee Document Review">
-            <EmployeeDocumentReview documents={rows(data.employeeDocuments)} />
-          </Panel>
-          <div className="grid gap-5 xl:grid-cols-2">
-            <RecordsList title="Company Documents" records={companyDocuments} />
-            <RecordsList title="Custom Field Values" records={customFieldValues} />
-          </div>
+          <AdminFilters data={data} />
+          <AdminTabs active={adminTab} setActive={setAdminTab} />
+          {adminTab === "Company Review" ? (
+            <Panel title="Client Company Review">
+              <ReviewTable rows={companies} type="company" />
+              <div className="mt-5"><RecordsList title="Company Documents" records={companyDocuments} /></div>
+            </Panel>
+          ) : null}
+          {adminTab === "Employee Review" ? (
+            <Panel title="Employee Onboarding Review">
+              <EmployeeRequestInviteTable requests={rows(data.employeeRequests)} allowResend />
+              <div className="mt-5">
+                <ReviewTable rows={(data.employeeStatuses as Row[] | undefined) ?? []} type="employee" />
+              </div>
+            </Panel>
+          ) : null}
+          {adminTab === "Document Review" ? (
+            <Panel title="Employee Document Review">
+              <EmployeeDocumentReview documents={rows(data.employeeDocuments)} />
+            </Panel>
+          ) : null}
+          {adminTab === "Corrections" ? (
+            <Panel title="Corrections">
+              <EmployeeDocumentReview documents={rows(data.employeeDocuments).filter((document) => document.verification_status === "Rejected")} />
+            </Panel>
+          ) : null}
+          {adminTab === "Templates" ? (
+            <Panel title="Contract Templates">
+              <TemplateForm companies={companies} />
+              <div className="mt-5"><RecordsList title="Template History" records={templates} /></div>
+            </Panel>
+          ) : null}
+          {adminTab === "Custom Fields" ? (
+            <Panel title="Custom Fields">
+              <CustomFieldForm companies={companies} />
+              <div className="mt-5"><RecordsList title="Custom Field Values" records={customFieldValues} /></div>
+            </Panel>
+          ) : null}
         </>
       ) : null}
 
-      <div className="grid gap-5 xl:grid-cols-2">
-        <Panel title="Contract Templates">
-          <TemplateForm companies={companies} />
-        </Panel>
-        <Panel title="Custom Fields">
-          <CustomFieldForm companies={companies} />
-        </Panel>
-      </div>
+      {mode === "employer" ? (
+        <div className="grid gap-5 xl:grid-cols-2">
+          <Panel title="Contract Templates">
+            <TemplateForm companies={companies} />
+            <div className="mt-5"><RecordsList title="Template History" records={templates} /></div>
+          </Panel>
+          <Panel title="Custom Fields">
+            <CustomFieldForm companies={companies} />
+          </Panel>
+        </div>
+      ) : null}
 
       <Panel title="Current Records">
         <div className="grid gap-3 md:grid-cols-3">

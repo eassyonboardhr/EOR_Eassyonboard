@@ -12,6 +12,7 @@ import {
   templateSchema,
 } from "@/lib/portal/global-onboarding-schema";
 import { onboardingCompletionPercentage } from "@/lib/portal/global-onboarding";
+import { allRequiredDocumentsApproved } from "@/lib/portal/document-access";
 import type { Json } from "@/lib/supabase/database.types";
 import type { PortalRole } from "@/lib/portal/types";
 
@@ -296,6 +297,14 @@ export async function saveEmployeeSelfOnboardingAction(formData: FormData) {
     .single();
 
   if (!employee) throw new Error("Employee profile is not linked.");
+  const { data: onboardingStatus } = await supabase
+    .from("employee_onboarding_status")
+    .select("status")
+    .eq("employee_id", employee.id)
+    .maybeSingle();
+  if (onboardingStatus?.status === "Approved") {
+    throw new Error("Approved onboarding records are locked.");
+  }
 
   const parsed = employeeOnboardingSchema.parse({
     full_name: requireString(formData, "full_name"),
@@ -448,15 +457,26 @@ export async function reviewEmployeeOnboardingAction(formData: FormData) {
   }
 
   const supabase = getSupabaseAdmin();
-  await supabase.from("employee_onboarding_status").upsert({
-    employee_id: employeeId,
-    status: decision,
-    reviewed_by: session.user.id,
-    reviewed_at: new Date().toISOString(),
-    remarks: optionalString(formData, "remarks"),
-  }, { onConflict: "employee_id" });
+  const reviewedAt = new Date().toISOString();
+  const remarks = optionalString(formData, "remarks");
 
   if (decision === "Approved") {
+    const [{ data: employeeExperience }, { data: documents }] = await Promise.all([
+      supabase
+        .from("employee_experience")
+        .select("is_fresher")
+        .eq("employee_id", employeeId)
+        .maybeSingle(),
+      supabase
+        .from("employee_documents")
+        .select("id, document_type, file_path, verification_status, replaced_by_document_id")
+        .eq("employee_id", employeeId),
+    ]);
+
+    if (!allRequiredDocumentsApproved(documents ?? [], employeeExperience?.is_fresher ?? true)) {
+      throw new Error("All mandatory employee documents must be approved before onboarding approval.");
+    }
+
     const { data: pendingDocuments } = await supabase
       .from("employee_documents")
       .select("id")
@@ -509,6 +529,14 @@ export async function reviewEmployeeOnboardingAction(formData: FormData) {
       }
     }
   }
+
+  await supabase.from("employee_onboarding_status").upsert({
+    employee_id: employeeId,
+    status: decision,
+    reviewed_by: session.user.id,
+    reviewed_at: reviewedAt,
+    remarks,
+  }, { onConflict: "employee_id" });
 
   await writeAudit(session.user, `review_employee_onboarding_${decision}`, "employee", employeeId);
   revalidatePath("/dashboard/onboarding");
@@ -792,11 +820,13 @@ export async function recordEmployeeDocumentAction(formData: FormData) {
   const supabase = getSupabaseAdmin();
   const { data: employee } = await supabase.from("employees").select("id").eq("portal_user_id", session.user.id).single();
   if (!employee) throw new Error("Employee profile is not linked.");
+  const { data: onboardingStatus } = await supabase
+    .from("employee_onboarding_status")
+    .select("status")
+    .eq("employee_id", employee.id)
+    .maybeSingle();
 
   const path = `${employee.id}/${Date.now()}-${fileNameSafe(file.name)}`;
-  const { error: uploadError } = await supabase.storage.from("employee-documents").upload(path, file, { upsert: false });
-  if (uploadError) throw new Error(uploadError.message);
-
   const { data: previous } = await supabase
     .from("employee_documents")
     .select("id")
@@ -807,6 +837,13 @@ export async function recordEmployeeDocumentAction(formData: FormData) {
     .order("uploaded_at", { ascending: false })
     .limit(1)
     .maybeSingle();
+
+  if (onboardingStatus?.status === "Approved" && !previous) {
+    throw new Error("Approved onboarding documents are locked unless replacing a rejected document.");
+  }
+
+  const { error: uploadError } = await supabase.storage.from("employee-documents").upload(path, file, { upsert: false });
+  if (uploadError) throw new Error(uploadError.message);
 
   const { data: created } = await supabase.from("employee_documents").insert({
     employee_id: employee.id,

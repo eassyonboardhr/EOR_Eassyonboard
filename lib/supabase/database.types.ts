@@ -1120,6 +1120,7 @@ export type Database = {
           hourly_billing_rate: number | null
           hours_per_week: number
           id: string
+          invite_error: string | null
           invite_id: string | null
           invite_sent_at: string | null
           job_title: string | null
@@ -1146,6 +1147,7 @@ export type Database = {
           hourly_billing_rate?: number | null
           hours_per_week?: number
           id?: string
+          invite_error?: string | null
           invite_id?: string | null
           invite_sent_at?: string | null
           job_title?: string | null
@@ -1172,6 +1174,7 @@ export type Database = {
           hourly_billing_rate?: number | null
           hours_per_week?: number
           id?: string
+          invite_error?: string | null
           invite_id?: string | null
           invite_sent_at?: string | null
           job_title?: string | null

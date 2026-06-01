@@ -181,24 +181,37 @@ export async function approveEmployeeRequestAction(formData: FormData) {
   });
 
   const clerk = await clerkClient();
-  const invitation = await clerk.invitations.createInvitation({
-    emailAddress: request.email,
-    redirectUrl: await appUrl("/sign-up"),
-    notify: true,
-    ignoreExisting: true,
-    publicMetadata: {
-      portalRole: "employee",
-      employerId: request.employer_id,
-      employeeId: employee.id,
-      source: "admin_approved_employee_request",
-    },
-  });
+  let invitation: Awaited<ReturnType<typeof clerk.invitations.createInvitation>>;
+  try {
+    invitation = await clerk.invitations.createInvitation({
+      emailAddress: request.email,
+      redirectUrl: await appUrl("/sign-up"),
+      notify: true,
+      ignoreExisting: true,
+      publicMetadata: {
+        portalRole: "employee",
+        employerId: request.employer_id,
+        employeeId: employee.id,
+        source: "admin_approved_employee_request",
+      },
+    });
+  } catch (error) {
+    await supabase
+      .from("employee_requests")
+      .update({
+        employee_id: employee.id,
+        invite_error: error instanceof Error ? error.message : "Could not send employee invite.",
+      })
+      .eq("id", requestId);
+    throw error;
+  }
 
   await supabase
     .from("employee_requests")
     .update({
       status: "approved",
       employee_id: employee.id,
+      invite_error: null,
       invite_id: invitation.id,
       invite_sent_at: new Date().toISOString(),
       calculated_annual_salary: annualSalary,
@@ -216,6 +229,66 @@ export async function approveEmployeeRequestAction(formData: FormData) {
   revalidatePath("/dashboard/admin");
   revalidatePath("/dashboard/onboarding");
   revalidatePath("/dashboard/employer");
+}
+
+export async function resendEmployeeInviteAction(formData: FormData) {
+  const session = await requirePortalRole(["super_admin", "admin"]);
+  const requestId = requireString(formData, "request_id");
+  const supabase = getSupabaseAdmin();
+  const { data: request, error } = await supabase
+    .from("employee_requests")
+    .select("id, employer_id, email, full_name, status, employee_id")
+    .eq("id", requestId)
+    .single();
+
+  if (error || !request) {
+    throw new Error(error?.message ?? "Employee request not found.");
+  }
+
+  if (request.status !== "approved" || !request.employee_id) {
+    throw new Error("Only approved employee requests with an employee record can be reinvited.");
+  }
+
+  const clerk = await clerkClient();
+  try {
+    const invitation = await clerk.invitations.createInvitation({
+      emailAddress: request.email,
+      redirectUrl: await appUrl("/sign-up"),
+      notify: true,
+      ignoreExisting: true,
+      publicMetadata: {
+        portalRole: "employee",
+        employerId: request.employer_id,
+        employeeId: request.employee_id,
+        source: "admin_resent_employee_invite",
+      },
+    });
+
+    await supabase
+      .from("employee_requests")
+      .update({
+        invite_id: invitation.id,
+        invite_sent_at: new Date().toISOString(),
+        invite_error: null,
+      })
+      .eq("id", requestId);
+
+    await writeAudit(session.user, "resend_employee_invite", "employee_request", requestId, {
+      employee_id: request.employee_id,
+      email: request.email,
+    });
+  } catch (error) {
+    await supabase
+      .from("employee_requests")
+      .update({
+        invite_error: error instanceof Error ? error.message : "Could not resend employee invite.",
+      })
+      .eq("id", requestId);
+    throw error;
+  }
+
+  revalidatePath("/dashboard/admin");
+  revalidatePath("/dashboard/onboarding");
 }
 
 export async function rejectEmployeeRequestAction(formData: FormData) {

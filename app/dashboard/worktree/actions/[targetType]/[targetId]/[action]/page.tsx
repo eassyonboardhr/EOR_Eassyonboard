@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PortalShell } from "@/components/portal/ui";
+import { withSignedUrls } from "@/lib/portal/document-access";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { isPlatformAdmin, requirePortalRole } from "@/lib/portal/session";
 
@@ -26,6 +27,26 @@ function Field({ label: fieldLabel, value }: { label: string; value: React.React
   );
 }
 
+function ModuleLink({
+  href,
+  title,
+  description,
+}: {
+  href: string;
+  title: string;
+  description: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="rounded-xl border border-slate-200 bg-slate-50 p-4 transition hover:border-blue-200 hover:bg-blue-50"
+    >
+      <p className="text-sm font-semibold text-slate-950">{title}</p>
+      <p className="mt-1 text-xs leading-5 text-slate-500">{description}</p>
+    </Link>
+  );
+}
+
 function money(value: number | string | null | undefined, currency = "USD") {
   return new Intl.NumberFormat("en-IN", {
     style: "currency",
@@ -36,7 +57,16 @@ function money(value: number | string | null | undefined, currency = "USD") {
 
 async function getEmployer(targetId: string) {
   const supabase = getSupabaseAdmin();
-  const [{ data: employer }, { count: employeesCount }, { data: billing }, { data: company }] = await Promise.all([
+  const [
+    { data: employer },
+    { count: employeesCount },
+    { data: billing },
+    { data: company },
+    { data: employeeRequests },
+    { data: leaveRequests },
+    { data: offboardingCases },
+    { data: resignations },
+  ] = await Promise.all([
     supabase.from("employers").select("*").eq("id", targetId).single(),
     supabase.from("employees").select("id", { count: "exact", head: true }).eq("employer_id", targetId),
     supabase
@@ -50,6 +80,30 @@ async function getEmployer(targetId: string) {
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
+    supabase
+      .from("employee_requests")
+      .select("id, full_name, email, status, invite_sent_at, invite_error, created_at")
+      .eq("employer_id", targetId)
+      .order("created_at", { ascending: false })
+      .limit(8),
+    supabase
+      .from("leave_requests")
+      .select("id, employee_id, start_date, end_date, status, total_leave_days, created_at, employees(full_name)")
+      .eq("employer_id", targetId)
+      .order("created_at", { ascending: false })
+      .limit(8),
+    supabase
+      .from("offboarding_cases")
+      .select("id, employee_id, status, target_last_working_day, created_at")
+      .eq("employer_id", targetId)
+      .order("created_at", { ascending: false })
+      .limit(8),
+    supabase
+      .from("resignations")
+      .select("id, employee_id, status, calculated_last_working_day, created_at")
+      .eq("employer_id", targetId)
+      .order("created_at", { ascending: false })
+      .limit(8),
   ]);
 
   if (!employer) return null;
@@ -63,7 +117,16 @@ async function getEmployer(targetId: string) {
     {} as Record<string, number>,
   );
 
-  return { employer, employeesCount: employeesCount ?? 0, billingTotals: totals, company };
+  return {
+    employer,
+    employeesCount: employeesCount ?? 0,
+    billingTotals: totals,
+    company,
+    employeeRequests: employeeRequests ?? [],
+    leaveRequests: leaveRequests ?? [],
+    offboardingCases: offboardingCases ?? [],
+    resignations: resignations ?? [],
+  };
 }
 
 async function getEmployee(targetId: string) {
@@ -95,7 +158,8 @@ async function getEmployee(targetId: string) {
   ]);
 
   if (!employee) return null;
-  return { employee, compensation, billing, profile, progress, status, documents: documents ?? [] };
+  const signedDocuments = await withSignedUrls(documents ?? [], "employee-documents");
+  return { employee, compensation, billing, profile, progress, status, documents: signedDocuments };
 }
 
 export default async function WorktreeActionPage({
@@ -168,6 +232,17 @@ export default async function WorktreeActionPage({
             </div>
           ) : null}
 
+          {action === "details" ? (
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <h2 className="text-base font-semibold text-slate-950">Role-Aware Modules</h2>
+              <div className="mt-4 grid gap-3 md:grid-cols-3">
+                <ModuleLink href="/dashboard/onboarding" title="Onboarding" description="Review employer setup, hiring requests, company documents, and templates." />
+                <ModuleLink href={isAdmin ? `/dashboard/admin/leaves?employer=${data.employer.id}` : "/dashboard/employer/leaves"} title="Leaves" description="Open the live leave queue scoped to this employer." />
+                <ModuleLink href="/dashboard/worktree" title="Worktree" description="Return to the organization chart and employee relationship view." />
+              </div>
+            </div>
+          ) : null}
+
           {action === "finances" ? (
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <h2 className="text-base font-semibold text-slate-950">Monthly Billing Summary</h2>
@@ -179,6 +254,77 @@ export default async function WorktreeActionPage({
                 ) : (
                   <p className="text-sm text-slate-500">No employer billing records found yet.</p>
                 )}
+              </div>
+            </div>
+          ) : null}
+
+          {action === "leaves" ? (
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <h2 className="text-base font-semibold text-slate-950">Recent Leave Requests</h2>
+              <div className="mt-4 grid gap-3">
+                {data.leaveRequests.map((request) => (
+                  <div key={request.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
+                    <p className="font-semibold text-slate-950">{request.employees?.full_name ?? "Employee"}</p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {request.start_date} to {request.end_date} · {request.total_leave_days ?? "-"} days · {request.status}
+                    </p>
+                  </div>
+                ))}
+                {data.leaveRequests.length === 0 ? <p className="text-sm text-slate-500">No leave requests found for this employer.</p> : null}
+              </div>
+              <div className="mt-4">
+                <Link href={isAdmin ? `/dashboard/admin/leaves?employer=${data.employer.id}` : "/dashboard/employer/leaves"} className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white">
+                  Open Leave Module
+                </Link>
+              </div>
+            </div>
+          ) : null}
+
+          {action === "onboarding-requests" ? (
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <h2 className="text-base font-semibold text-slate-950">Hiring And Onboarding Requests</h2>
+              <div className="mt-4 grid gap-3">
+                {data.employeeRequests.map((request) => (
+                  <div key={request.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
+                    <p className="font-semibold text-slate-950">{request.full_name}</p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {request.email} · {request.status} · Invite {request.invite_sent_at ? "sent" : "not sent"}
+                    </p>
+                    {request.invite_error ? <p className="mt-2 text-xs font-semibold text-rose-700">{request.invite_error}</p> : null}
+                  </div>
+                ))}
+                {data.employeeRequests.length === 0 ? <p className="text-sm text-slate-500">No onboarding requests found for this employer.</p> : null}
+              </div>
+              <div className="mt-4">
+                <Link href={`/dashboard/onboarding?employer=${data.employer.id}`} className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white">
+                  Open Onboarding Module
+                </Link>
+              </div>
+            </div>
+          ) : null}
+
+          {action === "offboarding-requests" || action === "resignations" ? (
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <h2 className="text-base font-semibold text-slate-950">
+                {action === "offboarding-requests" ? "Offboarding Requests" : "Resignations"}
+              </h2>
+              <div className="mt-4 grid gap-3">
+                {(action === "offboarding-requests" ? data.offboardingCases : data.resignations).map((item) => (
+                  <div key={item.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
+                    <p className="font-semibold text-slate-950">{item.status.replaceAll("_", " ")}</p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Employee {item.employee_id} · Last working day {"target_last_working_day" in item ? item.target_last_working_day : item.calculated_last_working_day ?? "not set"}
+                    </p>
+                  </div>
+                ))}
+                {(action === "offboarding-requests" ? data.offboardingCases : data.resignations).length === 0 ? (
+                  <p className="text-sm text-slate-500">No records found yet.</p>
+                ) : null}
+              </div>
+              <div className="mt-4">
+                <Link href={action === "offboarding-requests" ? "/dashboard/offboarding" : "/dashboard/resignations"} className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white">
+                  Open {action === "offboarding-requests" ? "Offboarding" : "Resignations"}
+                </Link>
               </div>
             </div>
           ) : null}
@@ -253,22 +399,6 @@ export default async function WorktreeActionPage({
           </div>
         ) : null}
 
-        {showFinance ? (
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="text-base font-semibold text-slate-950">Finance Records</h2>
-            <div className="mt-4 grid gap-3 md:grid-cols-2">
-              <Field
-                label="Monthly Salary"
-                value={money(data.compensation?.monthly_salary, data.compensation?.currency ?? "USD")}
-              />
-              <Field
-                label="Employer Monthly Billing"
-                value={money(data.billing?.monthly_bill_amount, data.billing?.currency ?? "USD")}
-              />
-            </div>
-          </div>
-        ) : null}
-
         {action === "docs" ? (
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <h2 className="text-base font-semibold text-slate-950">Documents</h2>
@@ -278,7 +408,13 @@ export default async function WorktreeActionPage({
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <p className="text-sm font-semibold text-slate-950">{document.document_type.replaceAll("_", " ")}</p>
-                      <p className="mt-1 text-xs text-slate-500">{document.file_path}</p>
+                      {document.signed_url ? (
+                        <a href={document.signed_url} target="_blank" rel="noreferrer" className="mt-1 inline-flex text-xs font-semibold text-blue-700">
+                          View / Download
+                        </a>
+                      ) : (
+                        <p className="mt-1 text-xs text-slate-500">{document.file_path}</p>
+                      )}
                     </div>
                     <span className="rounded-full border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700">
                       {document.verification_status}
@@ -289,6 +425,56 @@ export default async function WorktreeActionPage({
               ))}
               {data.documents.length === 0 ? <p className="text-sm text-slate-500">No employee documents uploaded yet.</p> : null}
             </div>
+          </div>
+        ) : null}
+
+        {action === "leaves" ? (
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="text-base font-semibold text-slate-950">Leave Module</h2>
+            <p className="mt-2 text-sm text-slate-600">
+              Open this employee&apos;s leave calendar and request history in the live leave module.
+            </p>
+            <div className="mt-4">
+              <Link href={session.user.role === "employee" ? "/dashboard/employee/leaves" : `/dashboard/leaves/history/${data.employee.id}`} className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white">
+                Open Leaves
+              </Link>
+            </div>
+          </div>
+        ) : null}
+
+        {action === "resignation" ? (
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="text-base font-semibold text-slate-950">Resignation Module</h2>
+            <p className="mt-2 text-sm text-slate-600">
+              Use the resignation workflow for notice period calculation, employer acknowledgement, and last-working-day notices.
+            </p>
+            <div className="mt-4">
+              <Link href="/dashboard/resignations" className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white">
+                Open Resignations
+              </Link>
+            </div>
+          </div>
+        ) : null}
+
+        {action === "finances" ? (
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="text-base font-semibold text-slate-950">Finance Records</h2>
+            {showFinance ? (
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                <Field
+                  label="Monthly Salary"
+                  value={money(data.compensation?.monthly_salary, data.compensation?.currency ?? "USD")}
+                />
+                <Field
+                  label="Employer Monthly Billing"
+                  value={money(data.billing?.monthly_bill_amount, data.billing?.currency ?? "USD")}
+                />
+              </div>
+            ) : (
+              <p className="mt-2 text-sm text-slate-600">
+                Employee finance details are restricted here. Admins can view salary and billing; employers use the employer finance action for billing-only summaries.
+              </p>
+            )}
           </div>
         ) : null}
       </section>

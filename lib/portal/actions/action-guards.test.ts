@@ -277,6 +277,76 @@ function createDocumentReviewSupabaseMock() {
   };
 }
 
+function createOnboardingApprovalGateSupabaseMock() {
+  const upserts: Array<{ table: string; payload: Record<string, unknown> }> = [];
+
+  const table = (name: string) => {
+    const query = {
+      select: vi.fn(() => query),
+      eq: vi.fn(() => query),
+      upsert: vi.fn((payload: Record<string, unknown>) => {
+        upserts.push({ table: name, payload });
+        return query;
+      }),
+      maybeSingle: vi.fn(async () => ({
+        data: name === "employee_experience" ? { is_fresher: true } : null,
+        error: null,
+      })),
+      then:
+        name === "employee_documents"
+          ? vi.fn((resolve) => Promise.resolve({ data: [], error: null }).then(resolve))
+          : undefined,
+    };
+
+    return query;
+  };
+
+  return {
+    upserts,
+    client: {
+      from: vi.fn(table),
+    },
+  };
+}
+
+function createResendInviteSupabaseMock() {
+  const updates: Array<{ table: string; payload: Record<string, unknown> }> = [];
+
+  const table = (name: string) => {
+    const query = {
+      select: vi.fn(() => query),
+      eq: vi.fn(() => query),
+      update: vi.fn((payload: Record<string, unknown>) => {
+        updates.push({ table: name, payload });
+        return query;
+      }),
+      single: vi.fn(async () => ({
+        data:
+          name === "employee_requests"
+            ? {
+                id: "request_1",
+                employer_id: "employer_1",
+                email: "new.employee@example.com",
+                full_name: "New Employee",
+                status: "approved",
+                employee_id: "employee_1",
+              }
+            : null,
+        error: null,
+      })),
+    };
+
+    return query;
+  };
+
+  return {
+    updates,
+    client: {
+      from: vi.fn(table),
+    },
+  };
+}
+
 function createCustomFieldSupabaseMock() {
   const upserts: Array<{ table: string; payload: unknown }> = [];
   const requiredField = {
@@ -611,6 +681,60 @@ describe("onboarding core actions", () => {
       payload: expect.objectContaining({
         employee_id: "employee_1",
         status: "Needs Correction",
+      }),
+    });
+  });
+
+  test("admin onboarding approval is blocked until mandatory documents are approved", async () => {
+    const activeSession = {
+      ...session,
+      user: { ...session.user, status: "active" },
+    };
+    requirePortalRole.mockResolvedValue(activeSession);
+    const supabase = createOnboardingApprovalGateSupabaseMock();
+    getSupabaseAdmin.mockReturnValue(supabase.client);
+    const { reviewEmployeeOnboardingAction } = await import(
+      "@/lib/portal/actions/global-onboarding"
+    );
+
+    await expect(
+      reviewEmployeeOnboardingAction(
+        form({ employee_id: "employee_1", decision: "Approved" }),
+      ),
+    ).rejects.toThrow("mandatory employee documents");
+
+    expect(supabase.upserts).toEqual([]);
+  });
+
+  test("admin can resend an employee invite and update invite metadata", async () => {
+    const activeSession = {
+      ...session,
+      user: { ...session.user, status: "active" },
+    };
+    requirePortalRole.mockResolvedValue(activeSession);
+    const supabase = createResendInviteSupabaseMock();
+    getSupabaseAdmin.mockReturnValue(supabase.client);
+    const { resendEmployeeInviteAction } = await import(
+      "@/lib/portal/actions/employee"
+    );
+
+    await resendEmployeeInviteAction(form({ request_id: "request_1" }));
+
+    expect(createInvitation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        emailAddress: "new.employee@example.com",
+        ignoreExisting: true,
+        publicMetadata: expect.objectContaining({
+          portalRole: "employee",
+          employeeId: "employee_1",
+        }),
+      }),
+    );
+    expect(supabase.updates).toContainEqual({
+      table: "employee_requests",
+      payload: expect.objectContaining({
+        invite_id: "invitation_1",
+        invite_error: null,
       }),
     });
   });

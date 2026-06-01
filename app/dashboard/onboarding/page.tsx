@@ -3,9 +3,14 @@ import { PortalShell } from "@/components/portal/ui";
 import { getGlobalOnboardingData } from "@/lib/portal/global-onboarding";
 import { requirePortalRole } from "@/lib/portal/session";
 
-export default async function OnboardingPage() {
+export default async function OnboardingPage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const session = await requirePortalRole(["super_admin", "admin", "employer_admin", "employee"]);
-  const data = await getGlobalOnboardingData(session);
+  const params = searchParams ? await searchParams : {};
+  const data = await getGlobalOnboardingData(session, params);
 
   return (
     <PortalShell
