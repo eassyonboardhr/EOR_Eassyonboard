@@ -75,7 +75,8 @@ export default async function EmployeeDashboardPage() {
                 <TextInput name="end_date" label="End date" type="date" required />
                 <TextInput name="days" label="Days" type="number" defaultValue={1} required />
               </div>
-              <TextArea name="reason" label="Reason" />
+              <TextInput name="mobile_number" label="Mobile number" required />
+              <TextArea name="reason" label="Reason" required />
               <SubmitButton>Submit leave request</SubmitButton>
             </form>
           </Panel>
@@ -87,7 +88,7 @@ export default async function EmployeeDashboardPage() {
                 label="Preferred last working day"
                 type="date"
               />
-              <TextArea name="reason" label="Reason" />
+              <TextArea name="reason" label="Reason" required />
               <SubmitButton tone="secondary">Submit resignation</SubmitButton>
             </form>
           </Panel>

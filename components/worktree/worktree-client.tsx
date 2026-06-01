@@ -12,7 +12,7 @@ import type {
 import type { PortalRole } from "@/lib/portal/types";
 
 type SelectedNode =
-  | { type: "employer"; id: string; title: string; subtitle: string; meta: string }
+  | { type: "employer"; employer: WorktreeModel["employer"]; id: string; title: string; subtitle: string; meta: string }
   | { type: "employee"; employee: WorktreeEmployeeNode; teamName: string | null };
 
 const employerActions = [
@@ -38,6 +38,18 @@ function actionHref(type: "employer" | "employee", id: string, action: string) {
   if (type === "employee" && action === "leaves") {
     return `/dashboard/leaves/history/${id}`;
   }
+  if (type === "employee" && action === "resignation") {
+    return "/dashboard/resignations";
+  }
+  if (type === "employer" && action === "onboarding-requests") {
+    return "/dashboard/onboarding";
+  }
+  if (type === "employer" && action === "offboarding-requests") {
+    return "/dashboard/offboarding";
+  }
+  if (type === "employer" && action === "resignations") {
+    return "/dashboard/resignations";
+  }
 
   return `/dashboard/worktree/actions/${type}/${id}/${action}`;
 }
@@ -47,11 +59,68 @@ function canSendNotice(role: PortalRole, selected: SelectedNode) {
   return role === "employer_admin" && selected.type === "employee";
 }
 
+function MiniStat({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">{label}</p>
+      <p className="mt-1 text-sm font-bold text-slate-950">{value}</p>
+    </div>
+  );
+}
+
+function employeeStatusTags(employee: WorktreeEmployeeNode) {
+  const tags: Array<{ label: string; className: string }> = [];
+  const resignationStatus = employee.latestResignation?.status;
+  const offboardingStatus = employee.latestOffboarding?.status;
+
+  if (offboardingStatus === "completed" || employee.lifecycle_status === "offboarded") {
+    tags.push({ label: "Offboarded", className: "border-slate-300 bg-slate-100 text-slate-700" });
+  } else if (offboardingStatus === "in_progress" || employee.lifecycle_status === "under_offboarding") {
+    tags.push({ label: "Offboarding", className: "border-orange-200 bg-orange-50 text-orange-700" });
+  } else if (resignationStatus === "employer_acknowledged" || employee.lifecycle_status === "under_resignation") {
+    tags.push({ label: "Serving Notice", className: "border-sky-200 bg-sky-50 text-sky-700" });
+  } else if (resignationStatus === "completed") {
+    tags.push({ label: "Resigned", className: "border-violet-200 bg-violet-50 text-violet-700" });
+  } else if (resignationStatus === "submitted_to_admin" || resignationStatus === "forwarded_to_employer") {
+    tags.push({ label: "Resignation Pending", className: "border-amber-200 bg-amber-50 text-amber-700" });
+  } else if (employee.lifecycle_status === "onboarding" || employee.onboardingStatus?.status === "Submitted") {
+    tags.push({ label: "Onboarding", className: "border-blue-200 bg-blue-50 text-blue-700" });
+  } else if (employee.status === "active") {
+    tags.push({ label: "Active", className: "border-emerald-200 bg-emerald-50 text-emerald-700" });
+  } else {
+    tags.push({ label: employee.status.replaceAll("_", " "), className: "border-slate-200 bg-slate-50 text-slate-700" });
+  }
+
+  if (employee.employer_setup_completed_at) {
+    tags.push({ label: "Setup Done", className: "border-emerald-200 bg-white text-emerald-700" });
+  } else {
+    tags.push({ label: "Setup Pending", className: "border-amber-200 bg-white text-amber-700" });
+  }
+
+  return tags;
+}
+
+function EmployeeTags({ employee, compact = false }: { employee: WorktreeEmployeeNode; compact?: boolean }) {
+  return (
+    <div className={`flex flex-wrap gap-1.5 ${compact ? "mt-2" : ""}`}>
+      {employeeStatusTags(employee).map((tag) => (
+        <span
+          key={tag.label}
+          className={`inline-flex rounded-full border px-2 py-0.5 font-semibold capitalize ${compact ? "text-[10px]" : "text-xs"} ${tag.className}`}
+        >
+          {tag.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function WorktreeNode({
   title,
   subtitle,
   meta,
   initials,
+  employee,
   selected,
   onClick,
 }: {
@@ -59,6 +128,7 @@ function WorktreeNode({
   subtitle: string;
   meta?: string | null;
   initials: string;
+  employee?: WorktreeEmployeeNode;
   selected?: boolean;
   onClick: () => void;
 }) {
@@ -80,6 +150,7 @@ function WorktreeNode({
         </span>
       </div>
       {meta ? <p className="mt-3 truncate text-xs text-slate-500">{meta}</p> : null}
+      {employee ? <EmployeeTags employee={employee} compact /> : null}
     </button>
   );
 }
@@ -137,6 +208,7 @@ function TeamBranch({
                 <span className="block truncate text-xs text-slate-500">
                   {team.manager.job_title ?? "Team lead"}
                 </span>
+                <EmployeeTags employee={team.manager} compact />
               </span>
             </button>
           ) : null}
@@ -155,6 +227,7 @@ function TeamBranch({
                 subtitle={employee.job_title ?? "Employee"}
                 meta={employee.teamRole ?? team.name}
                 initials={employee.initials}
+                employee={employee}
                 selected={selected?.type === "employee" && selected.employee.id === employee.id}
                 onClick={() => onSelect({ type: "employee", employee, teamName: team.name })}
               />
@@ -308,7 +381,7 @@ function DetailsPanel({
             </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-5">
+            <div className="flex-1 overflow-y-auto p-5">
             <div className="flex items-center gap-4">
               <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-base font-bold text-blue-700 ring-1 ring-blue-100">
                 {selected.type === "employer"
@@ -327,8 +400,64 @@ function DetailsPanel({
                 <p className="mt-1 text-xs text-slate-500">
                   {selected.type === "employer" ? selected.meta : selected.teamName ?? selected.employee.department ?? "No team"}
                 </p>
+                {selected.type === "employee" ? <div className="mt-2"><EmployeeTags employee={selected.employee} /></div> : null}
               </div>
             </div>
+
+            {selected.type === "employer" ? (
+              <div className="mt-5 grid gap-3">
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <MiniStat label="Onboarding" value={selected.employer.clientCompany?.onboarding_status ?? "Not started"} />
+                  <MiniStat label="Country" value={selected.employer.clientCompany?.country ?? "Not set"} />
+                  <MiniStat label="Work mode" value={selected.employer.employmentDefaults?.work_mode ?? "Not set"} />
+                  <MiniStat label="Templates" value={selected.employer.templateCount} />
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-white p-3 text-xs leading-5 text-slate-600">
+                  <span className="font-semibold text-slate-900">Defaults:</span>{" "}
+                  {selected.employer.employmentDefaults
+                    ? `${selected.employer.employmentDefaults.working_hours}, ${selected.employer.employmentDefaults.notice_period} notice, ${selected.employer.employmentDefaults.probation_period} probation`
+                    : "Employment defaults are not configured yet."}
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-white p-3 text-xs leading-5 text-slate-600">
+                  <span className="font-semibold text-slate-900">Compliance:</span>{" "}
+                  {selected.employer.complianceSettings
+                    ? [
+                        selected.employer.complianceSettings.nda_required ? "NDA" : null,
+                        selected.employer.complianceSettings.background_check_required ? "BGV" : null,
+                        selected.employer.complianceSettings.equipment_required ? "Equipment" : null,
+                        selected.employer.complianceSettings.handles_customer_data ? "Customer data" : null,
+                      ].filter(Boolean).join(", ") || "No special requirements"
+                    : "Compliance preferences are not configured yet."}
+                </div>
+              </div>
+            ) : (
+              <div className="mt-5 grid gap-3">
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <MiniStat label="Onboarding" value={selected.employee.onboardingStatus?.status ?? "Draft"} />
+                  <MiniStat label="Progress" value={`${selected.employee.onboardingProgress?.completion_percentage ?? 0}%`} />
+                  <MiniStat label="Docs" value={selected.employee.documentCounts.total} />
+                  <MiniStat label="Notice" value={selected.employee.notice_period_days ? `${selected.employee.notice_period_days} days` : "Not set"} />
+                  <MiniStat label="LWD" value={selected.employee.latestResignation?.calculated_last_working_day ?? selected.employee.latestOffboarding?.target_last_working_day ?? "Not set"} />
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-white p-3 text-xs leading-5 text-slate-600">
+                  <span className="font-semibold text-slate-900">Employer setup:</span>{" "}
+                  {selected.employee.employer_setup_completed_at
+                    ? `Completed. ${selected.employee.employer_setup_notes ?? ""}`
+                    : "Team, manager, leave policy, and notice period still need employer confirmation."}
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-white p-3 text-xs leading-5 text-slate-600">
+                  <span className="font-semibold text-slate-900">Profile:</span>{" "}
+                  {selected.employee.onboardingProfile
+                    ? `${selected.employee.onboardingProfile.phone ?? "No phone"} · ${selected.employee.onboardingProfile.gender ?? "No gender"}`
+                    : "Employee self-onboarding profile is not submitted yet."}
+                </div>
+                {selected.employee.documentCounts.pending || selected.employee.documentCounts.rejected ? (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-800">
+                    {selected.employee.documentCounts.pending} pending document(s), {selected.employee.documentCounts.rejected} rejected document(s)
+                  </div>
+                ) : null}
+              </div>
+            )}
 
             {canSendNotice(role, selected) ? (
               <div className="mt-6">
@@ -428,6 +557,7 @@ function WorktreeCanvas({
                 onClick={() =>
                   setSelected({
                     type: "employer",
+                    employer,
                     id: employer.id,
                     title: employer.name,
                     subtitle: employer.legal_name ?? "Employer",
@@ -476,6 +606,7 @@ function EmployeeSelfView({ employee, role }: { employee: WorktreeEmployeeNode; 
               <p className="font-semibold text-slate-950">{employee.full_name}</p>
               <p className="mt-1 text-sm text-slate-500">{employee.job_title ?? "Employee"}</p>
               <p className="text-xs text-slate-500">{employee.department ?? "No team"}</p>
+              <div className="mt-2"><EmployeeTags employee={employee} /></div>
             </div>
           </div>
         </div>

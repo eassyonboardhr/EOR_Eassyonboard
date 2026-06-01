@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { submitLeaveRequestAction } from "@/lib/portal/actions/leave";
 import { calculateLeaveDays, eachDateInRange } from "@/lib/portal/leave-utils";
-import type { LeaveSummary } from "@/lib/portal/leaves";
+import type { LeaveLifecycleMarkers, LeaveSummary } from "@/lib/portal/leaves";
 
 type LeaveDay = {
   date: string;
@@ -98,8 +98,16 @@ function weeklyOffWeekdaysForDate(date: string, policy: CalendarPolicy | undefin
     .map(([weekday]) => weekday);
 }
 
-function statusClasses(day: LeaveDay | undefined, holiday: boolean, selected: boolean) {
+function statusClasses(
+  day: LeaveDay | undefined,
+  holiday: boolean,
+  selected: boolean,
+  inNoticePeriod: boolean,
+  isLastWorkingDay: boolean,
+) {
   if (selected) return "border-blue-500 bg-blue-50 text-blue-800 ring-1 ring-blue-200";
+  if (isLastWorkingDay) return "border-yellow-400 bg-yellow-50 text-yellow-900 ring-1 ring-yellow-200";
+  if (inNoticePeriod) return "border-sky-300 bg-sky-50 text-sky-800";
   if (day?.is_lop) return "border-purple-300 bg-purple-50 text-purple-800";
   if (day?.status === "approved") return "border-emerald-300 bg-emerald-50 text-emerald-800";
   if (day?.status === "pending") return "border-amber-300 bg-amber-50 text-amber-800";
@@ -115,6 +123,8 @@ function Legend() {
     ["Approved", "bg-emerald-500"],
     ["Rejected", "bg-rose-500"],
     ["LOP", "bg-purple-600"],
+    ["Notice period", "bg-sky-400"],
+    ["Last working day", "bg-yellow-500"],
     ["Taken (X)", "text-slate-950"],
   ];
 
@@ -242,6 +252,7 @@ export function LeaveCalendar({
   holidays,
   calendarPolicy,
   absences = [],
+  lifecycleMarkers,
 }: {
   mode: "apply" | "history";
   year: number;
@@ -250,6 +261,7 @@ export function LeaveCalendar({
   holidays: Holiday[];
   calendarPolicy?: CalendarPolicy;
   absences?: Absence[];
+  lifecycleMarkers?: LeaveLifecycleMarkers;
 }) {
   const [viewYear, setViewYear] = useState(year);
   const [viewMonth, setViewMonth] = useState(month);
@@ -366,6 +378,12 @@ export function LeaveCalendar({
             const absence = absenceByDate.get(cell.iso);
             const selected = selectedDates.has(cell.iso);
             const taken = day?.status === "approved" && cell.iso < toIsoDate(new Date());
+            const inNoticePeriod =
+              !!lifecycleMarkers?.noticePeriodStart &&
+              !!lifecycleMarkers.noticePeriodEnd &&
+              cell.iso >= lifecycleMarkers.noticePeriodStart &&
+              cell.iso <= lifecycleMarkers.noticePeriodEnd;
+            const isLastWorkingDay = lifecycleMarkers?.lastWorkingDay === cell.iso;
             return (
               <button
                 key={cell.iso}
@@ -373,11 +391,14 @@ export function LeaveCalendar({
                 onClick={() => selectDate(cell.iso)}
                 className={`relative min-h-16 border p-2 text-left text-xs transition hover:z-10 hover:ring-2 hover:ring-blue-100 ${
                   cell.inMonth ? "" : "opacity-40"
-                } ${statusClasses(day, holiday, selected)} ${absence?.is_lop ? "after:absolute after:right-1 after:top-1 after:h-2 after:w-2 after:rounded-full after:bg-purple-600" : ""}`}
+                } ${statusClasses(day, holiday, selected, inNoticePeriod, isLastWorkingDay)} ${absence?.is_lop ? "after:absolute after:right-1 after:top-1 after:h-2 after:w-2 after:rounded-full after:bg-purple-600" : ""}`}
               >
                 <span className="font-semibold">{cell.day}</span>
                 {taken ? <span className="absolute inset-0 flex items-center justify-center text-lg font-bold text-slate-900">X</span> : null}
                 {day?.is_lop ? <span className="absolute bottom-1 right-1 rounded bg-purple-600 px-1 text-[9px] font-bold text-white">LOP</span> : null}
+                {isLastWorkingDay ? (
+                  <span className="absolute bottom-1 right-1 rounded bg-yellow-500 px-1 text-[9px] font-bold text-white">LWD</span>
+                ) : null}
               </button>
             );
           })}
@@ -495,6 +516,7 @@ export function LeaveHistoryView({
   holidays,
   calendarPolicy,
   absences,
+  lifecycleMarkers,
   year,
   month,
 }: {
@@ -504,6 +526,7 @@ export function LeaveHistoryView({
   holidays: Holiday[];
   calendarPolicy?: CalendarPolicy;
   absences: Absence[];
+  lifecycleMarkers?: LeaveLifecycleMarkers;
   year: number;
   month: number;
 }) {
@@ -529,6 +552,7 @@ export function LeaveHistoryView({
         holidays={holidays}
         calendarPolicy={calendarPolicy}
         absences={absences}
+        lifecycleMarkers={lifecycleMarkers}
       />
       <LeaveSummaryCard summary={summary} />
     </div>

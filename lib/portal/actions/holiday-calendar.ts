@@ -103,6 +103,19 @@ function buildPayload(formData: FormData) {
     };
   }
 
+  if (requestType === "date_override_delete") {
+    const date = requireString(formData, "date");
+    return {
+      requestType,
+      payload: {
+        date,
+        override_type: optionalString(formData, "override_type"),
+        name: optionalString(formData, "name"),
+      },
+      fallbackTitle: `Delete date override on ${date}`,
+    };
+  }
+
   throw new Error("Invalid calendar request type.");
 }
 
@@ -287,6 +300,15 @@ async function applyApprovedCalendarRequest(
       },
       { onConflict: "employer_id,date" },
     );
+    if (error) throw new Error(error.message);
+  }
+
+  if (request.request_type === "date_override_delete") {
+    const { error } = await supabase
+      .from("holiday_overrides")
+      .delete()
+      .eq("employer_id", request.employer_id)
+      .eq("date", String(payload.date));
     if (error) throw new Error(error.message);
   }
 }

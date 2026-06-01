@@ -34,6 +34,7 @@ export default async function LeaveHistoryPage({
         holidays={data.holidays}
         calendarPolicy={data.calendarPolicy}
         absences={data.absences}
+        lifecycleMarkers={data.lifecycleMarkers}
         year={data.year}
         month={data.month}
       />

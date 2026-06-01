@@ -29,6 +29,12 @@ export type LeaveSummary = {
   lop: number;
 };
 
+export type LeaveLifecycleMarkers = {
+  noticePeriodStart: string | null;
+  noticePeriodEnd: string | null;
+  lastWorkingDay: string | null;
+};
+
 export function buildLeaveSummary(
   balance: LeaveBalanceRow | null,
   requests: LeaveRequestRow[],
@@ -77,6 +83,28 @@ async function balanceFor(employeeId: string, year: number) {
   return data;
 }
 
+function buildLifecycleMarkers(
+  resignations: Array<{
+    acknowledged_at: string | null;
+    calculated_last_working_day: string | null;
+    status: string | null;
+  }>,
+): LeaveLifecycleMarkers {
+  const acceptedResignation = resignations.find(
+    (resignation) =>
+      resignation.calculated_last_working_day &&
+      ["employer_acknowledged", "offboarding_requested", "admin_approved", "in_progress", "completed"].includes(
+        resignation.status ?? "",
+      ),
+  );
+
+  return {
+    noticePeriodStart: acceptedResignation?.acknowledged_at?.slice(0, 10) ?? null,
+    noticePeriodEnd: acceptedResignation?.calculated_last_working_day ?? null,
+    lastWorkingDay: acceptedResignation?.calculated_last_working_day ?? null,
+  };
+}
+
 export async function getEmployeeLeavesPageData(session: PortalSession) {
   const supabase = getSupabaseAdmin();
   const year = new Date().getFullYear();
@@ -88,7 +116,7 @@ export async function getEmployeeLeavesPageData(session: PortalSession) {
 
   if (!employee) return null;
 
-  const [balance, requests, days, calendarPolicy, absences] = await Promise.all([
+  const [balance, requests, days, calendarPolicy, absences, resignations] = await Promise.all([
     balanceFor(employee.id, year),
     supabase
       .from("leave_requests")
@@ -106,6 +134,11 @@ export async function getEmployeeLeavesPageData(session: PortalSession) {
       .select("*")
       .eq("employee_id", employee.id)
       .order("created_at", { ascending: false }),
+    supabase
+      .from("resignations")
+      .select("acknowledged_at, calculated_last_working_day, status")
+      .eq("employee_id", employee.id)
+      .order("created_at", { ascending: false }),
   ]);
 
   const leaveRequests = requests.data ?? [];
@@ -118,6 +151,7 @@ export async function getEmployeeLeavesPageData(session: PortalSession) {
     holidays: calendarPolicy.holidays,
     calendarPolicy,
     absences: absences.data ?? [],
+    lifecycleMarkers: buildLifecycleMarkers(resignations.data ?? []),
     summary: buildLeaveSummary(balance, leaveRequests),
   };
 }
@@ -223,7 +257,7 @@ export async function getLeaveHistoryPageData(
   const month = Number(Array.isArray(searchParams.month) ? searchParams.month[0] : searchParams.month) || now.getMonth() + 1;
   const range = monthRange(year, month);
 
-  const [balance, requests, days, calendarPolicy, absences] = await Promise.all([
+  const [balance, requests, days, calendarPolicy, absences, resignations] = await Promise.all([
     balanceFor(employeeId, year),
     supabase
       .from("leave_requests")
@@ -245,6 +279,11 @@ export async function getLeaveHistoryPageData(
       .lte("start_date", range.endDate)
       .gte("end_date", range.startDate)
       .order("created_at", { ascending: false }),
+    supabase
+      .from("resignations")
+      .select("acknowledged_at, calculated_last_working_day, status")
+      .eq("employee_id", employeeId)
+      .order("created_at", { ascending: false }),
   ]);
 
   const leaveRequests = requests.data ?? [];
@@ -259,6 +298,7 @@ export async function getLeaveHistoryPageData(
     holidays: calendarPolicy.holidays,
     calendarPolicy,
     absences: absences.data ?? [],
+    lifecycleMarkers: buildLifecycleMarkers(resignations.data ?? []),
     summary: buildLeaveSummary(balance, leaveRequests),
   };
 }

@@ -22,6 +22,8 @@ function navSections(session: PortalSession): NavItem[] {
       { label: "Dashboard", icon: "D", href: dashboardHref(session) },
       { label: "Attendance", icon: "A", href: `${dashboardHref(session)}#attendance` },
       { label: "Leaves", icon: "L", href: "/dashboard/employee/leaves" },
+      { label: "Resignations", icon: "R", href: "/dashboard/resignations" },
+      { label: "Offboarding", icon: "O", href: "/dashboard/offboarding" },
       { label: "Messages", icon: "M", href: `${dashboardHref(session)}#messages` },
       { label: "Profile", icon: "P", href: dashboardHref(session) },
       { label: "Settings", icon: "S", href: `${dashboardHref(session)}#settings` },
@@ -32,8 +34,12 @@ function navSections(session: PortalSession): NavItem[] {
     return [
       { label: "Dashboard", icon: "D", href: dashboardHref(session) },
       { label: "Employees", icon: "EE", href: `${dashboardHref(session)}#employees` },
+      { label: "Teams", icon: "TM", href: "/dashboard/employer/teams" },
       { label: "Worktree", icon: "WT", href: "/dashboard/worktree" },
       { label: "Leaves", icon: "L", href: "/dashboard/employer/leaves" },
+      { label: "Onboarding", icon: "ON", href: "/dashboard/onboarding" },
+      { label: "Resignations", icon: "R", href: "/dashboard/resignations" },
+      { label: "Offboarding", icon: "O", href: "/dashboard/offboarding" },
       { label: "Reports", icon: "R", href: `${dashboardHref(session)}#reports` },
       { label: "Settings", icon: "S", href: `${dashboardHref(session)}#settings` },
     ];
@@ -45,6 +51,9 @@ function navSections(session: PortalSession): NavItem[] {
     { label: "Employees", icon: "EE", href: `${dashboardHref(session)}#employees` },
     { label: "Worktree", icon: "WT", href: "/dashboard/worktree" },
     { label: "Leaves", icon: "L", href: "/dashboard/admin/leaves" },
+    { label: "Onboarding", icon: "ON", href: "/dashboard/onboarding" },
+    { label: "Resignations", icon: "R", href: "/dashboard/resignations" },
+    { label: "Offboarding", icon: "O", href: "/dashboard/offboarding" },
     { label: "Reports", icon: "R", href: `${dashboardHref(session)}#reports` },
     { label: "Settings", icon: "S", href: `${dashboardHref(session)}#settings` },
   ];
@@ -87,8 +96,9 @@ export function PortalShell({
         <nav className="flex-1 space-y-1 px-3 py-5">
           {navigation.map((item) => {
             const isDashboard = item.label === "Dashboard";
+            const activeSectionTitles = ["worktree", "leaves", "onboarding", "resignations", "offboarding", "team"];
             const isActive =
-              (isDashboard && !activeTitle.includes("worktree") && !activeTitle.includes("leaves")) ||
+              (isDashboard && !activeSectionTitles.some((section) => activeTitle.includes(section))) ||
               activeTitle.includes(item.label.toLowerCase());
             return (
               <Link

@@ -40,6 +40,7 @@ export default async function EmployeeLeavesPage() {
           holidays={data.holidays}
           calendarPolicy={data.calendarPolicy}
           absences={data.absences}
+          lifecycleMarkers={data.lifecycleMarkers}
         />
         <div className="grid content-start gap-5">
           <LeaveSummaryCard summary={data.summary} />

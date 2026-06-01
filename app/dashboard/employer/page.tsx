@@ -89,6 +89,21 @@ export default async function EmployerDashboardPage() {
               <TextInput name="job_title" label="Job title" />
               <TextInput name="department" label="Department" />
               <TextInput name="proposed_start_date" label="Proposed start date" type="date" />
+              <label className="grid gap-1 text-sm font-medium text-slate-700">
+                Billing currency
+                <select name="billing_currency" className="h-10 border border-slate-300 px-3">
+                  <option value="USD">USD</option>
+                  <option value="INR">INR</option>
+                  <option value="EUR">EUR</option>
+                  <option value="GBP">GBP</option>
+                  <option value="AED">AED</option>
+                </select>
+              </label>
+              <TextInput name="hourly_billing_rate" label="Employer Billing / Hr" type="number" required />
+              <TextInput name="hours_per_week" label="Hours / Week" type="number" defaultValue={40} />
+              <div className="md:col-span-2">
+                <TextArea name="onboarding_notes" label="Notes" />
+              </div>
               <div className="md:col-span-2">
                 <SubmitButton>Submit employee request</SubmitButton>
               </div>
@@ -113,7 +128,7 @@ export default async function EmployerDashboardPage() {
                   </div>
                   <form action={requestOffboardingAction} className="mt-3 grid gap-2 md:grid-cols-[1fr_auto]">
                     <input type="hidden" name="employee_id" value={employee.id} />
-                    <TextInput name="target_last_working_day" label="Target last working day" type="date" />
+                    <TextInput name="target_last_working_day" label="Target last working day" type="date" required />
                     <div className="pt-6">
                       <SubmitButton tone="secondary">Request offboarding</SubmitButton>
                     </div>
@@ -181,8 +196,9 @@ export default async function EmployerDashboardPage() {
                   <input type="hidden" name="resignation_id" value={resignation.id} />
                   {resignation.status === "forwarded_to_employer" ? (
                     <div className="mt-3 grid gap-2">
+                      <TextInput name="notice_period_days" label="Notice period days" type="number" defaultValue={30} required />
                       <TextArea name="employer_notes" label="Employer notes" />
-                      <SubmitButton>Acknowledge</SubmitButton>
+                      <SubmitButton>Accept and send notice</SubmitButton>
                     </div>
                   ) : null}
                 </form>

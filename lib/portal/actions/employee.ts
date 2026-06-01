@@ -2,9 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { optionalString, requireString } from "@/lib/portal/form";
+import { numberValue, optionalString, requireString } from "@/lib/portal/form";
 import { requirePortalRole } from "@/lib/portal/session";
 import { writeAudit } from "@/lib/portal/actions/audit";
+import { calculateMonthlySalaryFromHourly } from "@/lib/portal/lifecycle-utils";
 
 async function requireEmployerReady(employerId: string) {
   const supabase = getSupabaseAdmin();
@@ -42,6 +43,11 @@ export async function createEmployeeRequestAction(formData: FormData) {
       job_title: optionalString(formData, "job_title"),
       department: optionalString(formData, "department"),
       proposed_start_date: optionalString(formData, "proposed_start_date"),
+      hourly_billing_rate: numberValue(formData, "hourly_billing_rate"),
+      hours_per_week: numberValue(formData, "hours_per_week", 40),
+      weeks_per_year: 52,
+      billing_currency: optionalString(formData, "billing_currency") ?? "USD",
+      onboarding_notes: optionalString(formData, "onboarding_notes"),
     })
     .select("id")
     .single();
@@ -61,7 +67,7 @@ export async function approveEmployeeRequestAction(formData: FormData) {
 
   const { data: request, error } = await supabase
     .from("employee_requests")
-    .select("id, employer_id, email, full_name, job_title, department, proposed_start_date, status")
+    .select("id, employer_id, email, full_name, job_title, department, proposed_start_date, status, hourly_billing_rate, hours_per_week, billing_currency")
     .eq("id", requestId)
     .single();
 
@@ -83,6 +89,7 @@ export async function approveEmployeeRequestAction(formData: FormData) {
       department: request.department,
       start_date: request.proposed_start_date,
       status: "pending",
+      lifecycle_status: "onboarding",
     })
     .select("id")
     .single();
@@ -109,11 +116,44 @@ export async function approveEmployeeRequestAction(formData: FormData) {
     adjustment_notes: "Initial balance from company leave policy.",
   });
 
+  const hourlyBillingRate = Number(request.hourly_billing_rate ?? 0);
+  const hoursPerWeek = Number(request.hours_per_week ?? 40);
+  const weeksPerYear = 52;
+  const billingCurrency = request.billing_currency ?? "USD";
+  const annualSalary = hourlyBillingRate * hoursPerWeek * weeksPerYear;
+  const monthlySalary = calculateMonthlySalaryFromHourly(
+    hourlyBillingRate,
+    hoursPerWeek,
+    weeksPerYear,
+  );
+  const effectiveFrom = request.proposed_start_date ?? new Date().toISOString().slice(0, 10);
+
+  await supabase.from("employee_compensation").insert({
+    employee_id: employee.id,
+    monthly_salary: monthlySalary,
+    currency: billingCurrency,
+    effective_from: effectiveFrom,
+    created_by: session.user.id,
+    notes: `Calculated from Employer Billing / Hr ${hourlyBillingRate} * ${hoursPerWeek} hours/week * ${weeksPerYear} weeks/year / 12.`,
+  });
+
+  await supabase.from("employer_billing").insert({
+    employee_id: employee.id,
+    employer_id: request.employer_id,
+    monthly_bill_amount: monthlySalary,
+    currency: billingCurrency,
+    effective_from: effectiveFrom,
+    created_by: session.user.id,
+    notes: "Initial monthly billing calculated from employer-entered billing per-hour inputs.",
+  });
+
   await supabase
     .from("employee_requests")
     .update({
       status: "approved",
       employee_id: employee.id,
+      calculated_annual_salary: annualSalary,
+      calculated_monthly_salary: monthlySalary,
       reviewed_by: session.user.id,
       reviewed_at: new Date().toISOString(),
     })
@@ -122,8 +162,11 @@ export async function approveEmployeeRequestAction(formData: FormData) {
 
   await writeAudit(session.user, "approve_employee_request", "employee_request", requestId, {
     employee_id: employee.id,
+    calculated_monthly_salary: monthlySalary,
   });
   revalidatePath("/dashboard/admin");
+  revalidatePath("/dashboard/onboarding");
+  revalidatePath("/dashboard/employer");
 }
 
 export async function rejectEmployeeRequestAction(formData: FormData) {
@@ -144,4 +187,5 @@ export async function rejectEmployeeRequestAction(formData: FormData) {
 
   await writeAudit(session.user, "reject_employee_request", "employee_request", requestId);
   revalidatePath("/dashboard/admin");
+  revalidatePath("/dashboard/onboarding");
 }

@@ -147,9 +147,37 @@ export default async function EmployerHolidayCalendarPage() {
               <h2 className="text-base font-semibold text-slate-950">Approved Holidays</h2>
               <div className="mt-4 grid max-h-80 gap-3 overflow-auto">
                 {data.holidays.map((holiday) => (
-                  <div key={`${holiday.date}-${holiday.name}`} className="rounded-xl border border-slate-100 p-3 text-sm">
-                    <p className="font-semibold text-slate-950">{holiday.name}</p>
-                    <p className="text-slate-500">{formatDate(holiday.date)}</p>
+                  <div key={`${holiday.date}-${holiday.name}`} className="rounded-xl border border-slate-100 bg-white p-3 text-sm shadow-sm">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-semibold text-slate-950">{holiday.name}</p>
+                        <p className="text-slate-500">{formatDate(holiday.date)}</p>
+                      </div>
+                      <span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-bold text-emerald-700">
+                        Approved
+                      </span>
+                    </div>
+                    <details className="mt-3 rounded-lg border border-slate-100 bg-slate-50 p-3">
+                      <summary className="cursor-pointer text-xs font-bold text-blue-700">Edit / Delete</summary>
+                      <div className="mt-3 grid gap-3">
+                        <form action={submitHolidayCalendarChangeRequestAction} className="grid gap-2">
+                          <input type="hidden" name="request_type" value="holiday_edit" />
+                          <input type="hidden" name="previous_date" value={holiday.date} />
+                          <input type="hidden" name="previous_name" value={holiday.name} />
+                          <input name="date" type="date" min={today} defaultValue={holiday.date} required className="h-9 rounded-lg border border-slate-300 px-2 text-xs" />
+                          <input name="name" defaultValue={holiday.name} required className="h-9 rounded-lg border border-slate-300 px-2 text-xs" />
+                          <input name="effective_date" type="date" min={today} defaultValue={today} required className="h-9 rounded-lg border border-slate-300 px-2 text-xs" />
+                          <button className="h-9 rounded-lg bg-blue-700 px-3 text-xs font-bold text-white">Submit Edit</button>
+                        </form>
+                        <form action={submitHolidayCalendarChangeRequestAction}>
+                          <input type="hidden" name="request_type" value="holiday_delete" />
+                          <input type="hidden" name="date" value={holiday.date} />
+                          <input type="hidden" name="name" value={holiday.name} />
+                          <input type="hidden" name="effective_date" value={today} />
+                          <button className="h-9 w-full rounded-lg border border-rose-200 bg-rose-50 px-3 text-xs font-bold text-rose-700">Request Delete</button>
+                        </form>
+                      </div>
+                    </details>
                   </div>
                 ))}
                 {data.holidays.length === 0 ? <p className="text-sm text-slate-500">No approved holidays yet.</p> : null}
@@ -160,9 +188,33 @@ export default async function EmployerHolidayCalendarPage() {
               <h2 className="text-base font-semibold text-slate-950">Approved Overrides</h2>
               <div className="mt-4 grid gap-3">
                 {data.overrides.map((override) => (
-                  <div key={override.id} className="rounded-xl border border-slate-100 p-3 text-sm">
+                  <div key={override.id} className="rounded-xl border border-slate-100 bg-white p-3 text-sm shadow-sm">
                     <p className="font-semibold capitalize text-slate-950">{override.override_type.replace("_", " ")}</p>
                     <p className="text-slate-500">{formatDate(override.date)} {override.name ? `- ${override.name}` : ""}</p>
+                    <details className="mt-3 rounded-lg border border-slate-100 bg-slate-50 p-3">
+                      <summary className="cursor-pointer text-xs font-bold text-blue-700">Edit / Delete</summary>
+                      <div className="mt-3 grid gap-3">
+                        <form action={submitHolidayCalendarChangeRequestAction} className="grid gap-2">
+                          <input type="hidden" name="request_type" value="date_override" />
+                          <input name="date" type="date" min={today} defaultValue={override.date} required className="h-9 rounded-lg border border-slate-300 px-2 text-xs" />
+                          <select name="override_type" defaultValue={override.override_type} className="h-9 rounded-lg border border-slate-300 px-2 text-xs">
+                            <option value="working_day">Working day</option>
+                            <option value="holiday">Holiday</option>
+                          </select>
+                          <input name="name" defaultValue={override.name ?? ""} className="h-9 rounded-lg border border-slate-300 px-2 text-xs" />
+                          <input name="reason" defaultValue={override.reason ?? ""} className="h-9 rounded-lg border border-slate-300 px-2 text-xs" />
+                          <input name="effective_date" type="date" min={today} defaultValue={today} required className="h-9 rounded-lg border border-slate-300 px-2 text-xs" />
+                          <button className="h-9 rounded-lg bg-blue-700 px-3 text-xs font-bold text-white">Submit Edit</button>
+                        </form>
+                        <form action={submitHolidayCalendarChangeRequestAction}>
+                          <input type="hidden" name="request_type" value="date_override_delete" />
+                          <input type="hidden" name="date" value={override.date} />
+                          <input type="hidden" name="override_type" value={override.override_type} />
+                          <input type="hidden" name="effective_date" value={today} />
+                          <button className="h-9 w-full rounded-lg border border-rose-200 bg-rose-50 px-3 text-xs font-bold text-rose-700">Request Delete</button>
+                        </form>
+                      </div>
+                    </details>
                   </div>
                 ))}
                 {data.overrides.length === 0 ? <p className="text-sm text-slate-500">No approved date overrides yet.</p> : null}
