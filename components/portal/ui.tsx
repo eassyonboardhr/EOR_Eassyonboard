@@ -41,6 +41,7 @@ function navSections(session: PortalSession, unreadNotices = 0): NavItem[] {
       { label: "Teams", icon: "TM", href: "/dashboard/employer/teams" },
       { label: "Worktree", icon: "WT", href: "/dashboard/worktree" },
       { label: "Leaves", icon: "L", href: "/dashboard/employer/leaves" },
+      { label: "Messages", icon: "M", href: "/dashboard/notices?compose=1" },
       { label: "Notices", icon: "N", href: "/dashboard/notices", badge: noticeBadge },
       { label: "Onboarding", icon: "ON", href: "/dashboard/onboarding" },
       { label: "Resignations", icon: "R", href: "/dashboard/resignations" },
@@ -56,6 +57,7 @@ function navSections(session: PortalSession, unreadNotices = 0): NavItem[] {
     { label: "Employees", icon: "EE", href: `${dashboardHref(session)}#employees` },
     { label: "Worktree", icon: "WT", href: "/dashboard/worktree" },
     { label: "Leaves", icon: "L", href: "/dashboard/admin/leaves" },
+    { label: "Messages", icon: "M", href: "/dashboard/notices?compose=1" },
     { label: "Notices", icon: "N", href: "/dashboard/notices", badge: noticeBadge },
     { label: "Onboarding", icon: "ON", href: "/dashboard/onboarding" },
     { label: "Resignations", icon: "R", href: "/dashboard/resignations" },
@@ -103,10 +105,11 @@ export async function PortalShell({
         <nav className="flex-1 space-y-1 px-3 py-5">
           {navigation.map((item) => {
             const isDashboard = item.label === "Dashboard";
-            const activeSectionTitles = ["worktree", "leaves", "notices", "onboarding", "resignations", "offboarding", "team"];
+            const activeSectionTitles = ["worktree", "leaves", "notices", "messages", "onboarding", "resignations", "offboarding", "team"];
             const isActive =
               (isDashboard && !activeSectionTitles.some((section) => activeTitle.includes(section))) ||
-              activeTitle.includes(item.label.toLowerCase());
+              activeTitle.includes(item.label.toLowerCase()) ||
+              (item.label === "Messages" && activeTitle.includes("notices"));
             return (
               <Link
                 key={item.label}
