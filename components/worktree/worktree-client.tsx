@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { sendTargetedNoticeAction } from "@/lib/portal/actions/notices";
 import type {
   WorktreeEmployeeNode,
   WorktreeModel,
@@ -37,6 +36,12 @@ function actionLabel(action: string) {
 function actionHref(type: "employer" | "employee", id: string, action: string) {
   if (type === "employee" && action === "leaves") {
     return `/dashboard/leaves/history/${id}`;
+  }
+  if (type === "employee" && action === "docs") {
+    return `/dashboard/documents?employee=${id}`;
+  }
+  if (action === "finances") {
+    return type === "employee" ? `/dashboard/finances?employee=${id}` : `/dashboard/finances?employer=${id}`;
   }
   if (type === "employee" && action === "resignation") {
     return "/dashboard/resignations";
@@ -296,46 +301,16 @@ function NoticeComposer({
 }) {
   const targetType = selected.type;
   const targetId = selected.type === "employer" ? selected.id : selected.employee.id;
+  const recipient = `${targetType}:${targetId}`;
 
   return (
-    <form action={sendTargetedNoticeAction} className="grid gap-3 rounded-2xl border border-blue-100 bg-blue-50 p-4">
-      <input type="hidden" name="target_type" value={targetType} />
-      <input type="hidden" name="target_id" value={targetId} />
-      <input
-        name="title"
-        required
-        placeholder="Notice title"
-        className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-      />
-      <textarea
-        name="body"
-        required
-        placeholder="Write a message"
-        rows={3}
-        className="rounded-xl border border-blue-100 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-      />
-      <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
-        <select
-          name="priority"
-          defaultValue="normal"
-          className="h-10 rounded-xl border border-blue-100 bg-white px-3 text-sm outline-none focus:border-blue-500"
-        >
-          <option value="normal">Normal</option>
-          <option value="important">Important</option>
-          <option value="urgent">Urgent</option>
-        </select>
-        <button
-          type="submit"
-          className="h-10 rounded-xl bg-blue-700 px-4 text-sm font-semibold text-white transition hover:bg-blue-800"
-        >
-          Send Notice
-        </button>
-      </div>
-      <label className="flex items-center gap-2 text-xs font-medium text-slate-600">
-        <input name="requires_acknowledgement" type="checkbox" className="h-4 w-4 rounded border-slate-300" />
-        Require acknowledgement
-      </label>
-    </form>
+    <Link
+      href={`/dashboard/messages?recipient=${recipient}`}
+      className="flex items-center justify-between rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm font-semibold text-blue-700 transition hover:bg-blue-100"
+    >
+      Open message composer
+      <span>→</span>
+    </Link>
   );
 }
 

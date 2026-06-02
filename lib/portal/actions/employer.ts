@@ -3,7 +3,6 @@
 import { clerkClient } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
-import { redirect } from "next/navigation";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { optionalString, requireString } from "@/lib/portal/form";
 import { getPortalSession, requirePortalRole } from "@/lib/portal/session";
@@ -179,22 +178,4 @@ export async function rejectLeadAction(formData: FormData) {
 
   await writeAudit(session.user, "reject_lead", "employer_lead", leadId);
   revalidatePath("/dashboard/admin");
-}
-
-export async function goToDashboardAction() {
-  const session = await getPortalSession();
-
-  if (session.user.role === "super_admin" || session.user.role === "admin") {
-    redirect("/dashboard/admin");
-  }
-
-  if (session.user.role === "employer_admin" && session.user.status === "active") {
-    redirect("/dashboard/employer");
-  }
-
-  if (session.user.role === "employee" && session.user.status === "active") {
-    redirect("/dashboard/employee");
-  }
-
-  redirect("/request-received");
 }

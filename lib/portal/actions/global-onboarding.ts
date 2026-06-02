@@ -921,45 +921,6 @@ export async function createCustomFieldAction(formData: FormData) {
   revalidatePath("/dashboard/onboarding");
 }
 
-export async function createTemplateRecordAction(formData: FormData) {
-  const session = await requirePortalRole(["super_admin", "admin", "employer_admin"]);
-  const parsed = templateSchema.parse({
-    company_id: optionalString(formData, "company_id"),
-    template_type: requireString(formData, "template_type"),
-    template_name: requireString(formData, "template_name"),
-    file_path: requireString(formData, "file_path"),
-  });
-  const supabase = getSupabaseAdmin();
-  const uploadedByRole = isPlatformAdmin(session.user.role) ? "admin" : "employer";
-
-  if (parsed.company_id) {
-    const { data: latest } = await supabase
-      .from("contract_templates")
-      .select("version_number")
-      .eq("company_id", parsed.company_id)
-      .eq("template_type", parsed.template_type)
-      .order("version_number", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    await supabase
-      .from("contract_templates")
-      .update({ is_active: false })
-      .eq("company_id", parsed.company_id)
-      .eq("template_type", parsed.template_type);
-
-    await supabase.from("contract_templates").insert({
-      ...parsed,
-      uploaded_by_user_id: session.user.id,
-      uploaded_by_role: uploadedByRole,
-      version_number: Number(latest?.version_number ?? 0) + 1,
-      is_active: true,
-    });
-  }
-
-  revalidatePath("/dashboard/onboarding");
-}
-
 async function assertCompanyAccess(companyId: string, role: PortalRole, employerId: string | null) {
   const supabase = getSupabaseAdmin();
   const { data: company } = await supabase
