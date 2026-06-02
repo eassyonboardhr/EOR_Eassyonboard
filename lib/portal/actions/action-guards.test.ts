@@ -389,6 +389,56 @@ function createCustomFieldSupabaseMock() {
   };
 }
 
+function createTeamManagementSupabaseMock() {
+  const deletes: Array<{ table: string; filters: Array<{ column: string; value: unknown; op?: string }> }> = [];
+  const upserts: Array<{ table: string; payload: unknown }> = [];
+  const updates: Array<{ table: string; payload: Record<string, unknown> }> = [];
+
+  const table = (name: string) => {
+    const currentFilters: Array<{ column: string; value: unknown; op?: string }> = [];
+    let isDelete = false;
+    const query = {
+      select: vi.fn(() => query),
+      eq: vi.fn((column: string, value: unknown) => {
+        currentFilters.push({ column, value });
+        return query;
+      }),
+      neq: vi.fn((column: string, value: unknown) => {
+        currentFilters.push({ column, value, op: "neq" });
+        return query;
+      }),
+      delete: vi.fn(() => {
+        isDelete = true;
+        return query;
+      }),
+      upsert: vi.fn((payload: unknown) => {
+        upserts.push({ table: name, payload });
+        return Promise.resolve({ error: null });
+      }),
+      update: vi.fn((payload: Record<string, unknown>) => {
+        updates.push({ table: name, payload });
+        return query;
+      }),
+      single: vi.fn(async () => ({ data: { id: "row_1" }, error: null })),
+      then: vi.fn((resolve) => {
+        if (isDelete) deletes.push({ table: name, filters: [...currentFilters] });
+        return Promise.resolve({ error: null }).then(resolve);
+      }),
+    };
+
+    return query;
+  };
+
+  return {
+    deletes,
+    updates,
+    upserts,
+    client: {
+      from: vi.fn(table),
+    },
+  };
+}
+
 beforeEach(() => {
   getPortalSession.mockResolvedValue(session);
   requirePortalRole.mockResolvedValue(session);
@@ -759,5 +809,43 @@ describe("onboarding core actions", () => {
     ).rejects.toThrow("T-Shirt Size is required");
 
     expect(supabase.upserts).toEqual([]);
+  });
+});
+
+describe("team management hardening", () => {
+  test("moving an employee to a team clears their previous team memberships first", async () => {
+    const activeSession = {
+      ...session,
+      user: {
+        ...session.user,
+        role: "employer_admin",
+        status: "active",
+        employer_id: "employer_1",
+      },
+    };
+    requirePortalRole.mockResolvedValue(activeSession);
+    const supabase = createTeamManagementSupabaseMock();
+    getSupabaseAdmin.mockReturnValue(supabase.client);
+    const { addTeamMemberAction } = await import("@/lib/portal/actions/team-management");
+
+    await addTeamMemberAction(
+      form({ team_id: "team_new", employee_id: "employee_1", role_in_team: "Designer" }),
+    );
+
+    expect(supabase.deletes).toContainEqual({
+      table: "team_members",
+      filters: expect.arrayContaining([
+        { column: "employee_id", value: "employee_1" },
+        { column: "team_id", value: "team_new", op: "neq" },
+      ]),
+    });
+    expect(supabase.upserts).toContainEqual({
+      table: "team_members",
+      payload: expect.objectContaining({
+        team_id: "team_new",
+        employee_id: "employee_1",
+        role_in_team: "Designer",
+      }),
+    });
   });
 });

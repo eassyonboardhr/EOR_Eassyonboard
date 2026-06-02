@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState, useTransition } from "react";
 import {
   createCustomFieldAction,
   recordEmployeeDocumentAction,
@@ -425,6 +425,40 @@ function RecordsList({ title, records }: { title: string; records: Row[] }) {
   );
 }
 
+function groupedByEntity(records: Row[]) {
+  const groups = new Map<string, Row[]>();
+  for (const record of records) {
+    const key = String(record.entity_id ?? "unassigned");
+    groups.set(key, [...(groups.get(key) ?? []), record]);
+  }
+  return [...groups.entries()];
+}
+
+function GroupedCustomFieldValues({ records }: { records: Row[] }) {
+  const groups = groupedByEntity(records);
+  return (
+    <div className="grid gap-3">
+      {groups.map(([entityId, values]) => (
+        <details key={entityId} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <summary className="cursor-pointer text-sm font-bold text-slate-800">Entity {entityId} · {values.length} value(s)</summary>
+          <div className="mt-3 grid gap-2 md:grid-cols-2">
+            {values.map((record) => {
+              const field = record.custom_fields as Row | undefined;
+              return (
+                <div key={String(record.id)} className="rounded-lg bg-white p-3 text-xs text-slate-600">
+                  <p className="font-semibold text-slate-950">{String(field?.field_label ?? record.custom_field_id ?? "Custom field")}</p>
+                  <p className="mt-1 break-words">{String(record.value ?? "")}</p>
+                </div>
+              );
+            })}
+          </div>
+        </details>
+      ))}
+      {groups.length === 0 ? <p className="text-sm text-slate-500">No custom field values saved yet.</p> : null}
+    </div>
+  );
+}
+
 function CustomFieldForm({ companies }: { companies: Row[] }) {
   return (
     <form action={createCustomFieldAction} className="grid gap-4 md:grid-cols-2">
@@ -517,12 +551,43 @@ function EmployeeSelfOnboarding({ data }: { data: Row }) {
   const completedSteps = Array.isArray(progress?.completed_steps) ? progress.completed_steps.map((step) => String(step)) : [];
   const initialStep = Math.max(0, employeeSteps.findIndex((step) => step === progress?.current_step));
   const [activeStep, setActiveStep] = useState(initialStep);
+  const [saveMessage, setSaveMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
+  const [isSavingStep, startStepSave] = useTransition();
+  const stepFormRef = useRef<HTMLFormElement>(null);
   if (!employee) {
     return <Panel title="Employee Onboarding">Your employee profile is not linked yet.</Panel>;
   }
   const statusText = String(status?.status ?? "Draft");
   const formLocked = statusText === "Approved";
   const missingDocuments = checklist.filter((item) => !item.approved);
+  const missingSteps = employeeSteps.filter((step) => !completedSteps.includes(step));
+  const missingCustomFields = customFields.filter((field) => Boolean(field.required) && !fieldValue(customValues, field.id));
+  const rejectedDocuments = documents.filter((document) => document.verification_status === "Rejected");
+
+  function saveAndNext() {
+    const form = stepFormRef.current;
+    if (!form) return;
+    setSaveMessage(null);
+    startStepSave(async () => {
+      try {
+        const formData = new FormData(form);
+        await saveEmployeeOnboardingStepAction(formData);
+        setSaveMessage({
+          tone: "success",
+          text:
+            activeStep < employeeSteps.length - 1
+              ? `${employeeSteps[activeStep]} saved. Moving to ${employeeSteps[activeStep + 1]}.`
+              : `${employeeSteps[activeStep]} saved.`,
+        });
+        setActiveStep((step) => Math.min(step + 1, employeeSteps.length - 1));
+      } catch (error) {
+        setSaveMessage({
+          tone: "error",
+          text: error instanceof Error ? error.message : "Could not save this step.",
+        });
+      }
+    });
+  }
 
   return (
     <div className="grid gap-5">
@@ -551,7 +616,32 @@ function EmployeeSelfOnboarding({ data }: { data: Row }) {
           </div>
         ) : null}
         <StepTabs active={activeStep} setActive={setActiveStep} />
-        <form action={saveEmployeeOnboardingStepAction} className="grid gap-4 md:grid-cols-2">
+        <div className="mb-4 grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-3">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Missing steps</p>
+            <p className="mt-1 text-sm font-semibold text-slate-950">{missingSteps.length === 0 ? "All steps saved" : missingSteps.join(", ")}</p>
+          </div>
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Required custom fields</p>
+            <p className="mt-1 text-sm font-semibold text-slate-950">{missingCustomFields.length === 0 ? "Complete" : missingCustomFields.map((field) => String(field.field_label)).join(", ")}</p>
+          </div>
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Document blockers</p>
+            <p className="mt-1 text-sm font-semibold text-slate-950">{missingDocuments.length === 0 ? "All required docs approved" : `${missingDocuments.length} pending or missing`}</p>
+          </div>
+        </div>
+        {saveMessage ? (
+          <div
+            className={`mb-4 rounded-xl border p-3 text-sm font-semibold ${
+              saveMessage.tone === "success"
+                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                : "border-rose-200 bg-rose-50 text-rose-800"
+            }`}
+          >
+            {saveMessage.text}
+          </div>
+        ) : null}
+        <form ref={stepFormRef} action={saveEmployeeOnboardingStepAction} className="grid gap-4 md:grid-cols-2">
           <input type="hidden" name="current_step" value={employeeSteps[activeStep]} />
           <fieldset disabled={formLocked} className="contents">
             <StepSection active={activeStep} index={0}>
@@ -628,6 +718,14 @@ function EmployeeSelfOnboarding({ data }: { data: Row }) {
           {!formLocked ? (
             <div className="md:col-span-2 flex flex-wrap items-center gap-3">
               <Submit>Save Current Step</Submit>
+              <button
+                type="button"
+                onClick={saveAndNext}
+                disabled={isSavingStep}
+                className="h-10 rounded-xl border border-blue-200 bg-blue-50 px-4 text-sm font-semibold text-blue-700 transition hover:bg-blue-100 disabled:cursor-wait disabled:opacity-70"
+              >
+                {isSavingStep ? "Saving..." : "Save and Next"}
+              </button>
               <span className="text-xs text-slate-500">
                 Completed: {completedSteps.length} / {employeeSteps.length}
               </span>
@@ -641,6 +739,19 @@ function EmployeeSelfOnboarding({ data }: { data: Row }) {
         ) : null}
       </Panel>
       <Panel title="Document Uploads">
+        {rejectedDocuments.length > 0 ? (
+          <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">
+            <p className="font-semibold">Corrections requested</p>
+            <div className="mt-2 grid gap-2">
+              {rejectedDocuments.map((document) => (
+                <div key={String(document.id)} className="rounded-lg bg-white p-3">
+                  <p className="font-semibold capitalize">Replace this document: {String(document.document_type).replaceAll("_", " ")}</p>
+                  {document.remarks ? <p className="mt-1 text-xs">{String(document.remarks)}</p> : null}
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
         <form action={recordEmployeeDocumentAction} className="grid gap-4 md:grid-cols-3">
           <Select name="document_type" label="Document Type" options={["passport_photo", "aadhaar_card", "pan_card", "bank_proof", "resume", "degree_certificate", "salary_slip", "experience_letter", "relieving_letter"]} />
           <label className="grid gap-1 text-sm font-medium text-slate-700">
@@ -675,7 +786,17 @@ function EmployeeSelfOnboarding({ data }: { data: Row }) {
   );
 }
 
-function ReviewTable({ rows, type }: { rows: Row[]; type: "company" | "employee" }) {
+function ReviewTable({
+  rows,
+  type,
+  documents = [],
+  customValues = [],
+}: {
+  rows: Row[];
+  type: "company" | "employee";
+  documents?: Row[];
+  customValues?: Row[];
+}) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[760px] text-left text-sm">
@@ -691,9 +812,47 @@ function ReviewTable({ rows, type }: { rows: Row[]; type: "company" | "employee"
           {rows.map((row) => {
             const employee = row.employees as Row | undefined;
             const employer = employee?.employers as Row | undefined;
+            const rowDocuments = documents.filter((document) =>
+              type === "company"
+                ? document.company_id === row.id
+                : document.employee_id === row.employee_id,
+            );
+            const rowCustomValues = customValues.filter((item) =>
+              type === "company"
+                ? item.entity_id === row.id
+                : item.entity_id === row.employee_id,
+            );
+            const blockers = rowDocuments.filter((document) => document.verification_status === "Rejected" || document.verification_status === "Pending");
             return (
               <tr key={String(row.id)} className="border-b border-slate-100 align-top">
-                <td className="py-3 pr-4 font-semibold">{String(row.company_name ?? employee?.full_name ?? "Onboarding")}</td>
+                <td className="py-3 pr-4 font-semibold">
+                  <details>
+                    <summary className="cursor-pointer text-slate-950">{String(row.company_name ?? employee?.full_name ?? "Onboarding")}</summary>
+                    <div className="mt-3 grid min-w-[360px] gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600 md:grid-cols-2">
+                      <div>
+                        <p className="font-bold text-slate-950">Documents</p>
+                        <p>{rowDocuments.length} uploaded · {blockers.length} blocker(s)</p>
+                        {blockers.map((document) => (
+                          <p key={String(document.id)} className="mt-1 capitalize">
+                            {String(document.document_type).replaceAll("_", " ")}: {String(document.verification_status)}
+                          </p>
+                        ))}
+                      </div>
+                      <div>
+                        <p className="font-bold text-slate-950">Custom fields</p>
+                        {rowCustomValues.length === 0 ? <p>No saved values.</p> : null}
+                        {rowCustomValues.map((item) => {
+                          const field = item.custom_fields as Row | undefined;
+                          return (
+                            <p key={String(item.id)} className="mt-1">
+                              {String(field?.field_label ?? "Field")}: {String(item.value ?? "")}
+                            </p>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </details>
+                </td>
                 <td className="py-3 pr-4"><Badge value={row.onboarding_status ?? row.status} /></td>
                 <td className="py-3 pr-4 text-slate-500">{String(row.country ?? employer?.name ?? "")}</td>
                 <td className="py-3 pr-4">
@@ -928,7 +1087,7 @@ export function GlobalOnboardingView({ data }: { data: Row }) {
           <AdminTabs active={adminTab} setActive={setAdminTab} />
           {adminTab === "Company Review" ? (
             <Panel title="Client Company Review">
-              <ReviewTable rows={companies} type="company" />
+              <ReviewTable rows={companies} type="company" documents={companyDocuments} customValues={customFieldValues} />
               <div className="mt-5"><RecordsList title="Company Documents" records={companyDocuments} /></div>
             </Panel>
           ) : null}
@@ -936,7 +1095,7 @@ export function GlobalOnboardingView({ data }: { data: Row }) {
             <Panel title="Employee Onboarding Review">
               <EmployeeRequestInviteTable requests={rows(data.employeeRequests)} allowResend />
               <div className="mt-5">
-                <ReviewTable rows={(data.employeeStatuses as Row[] | undefined) ?? []} type="employee" />
+                <ReviewTable rows={(data.employeeStatuses as Row[] | undefined) ?? []} type="employee" documents={rows(data.employeeDocuments)} customValues={customFieldValues} />
               </div>
             </Panel>
           ) : null}
@@ -959,7 +1118,7 @@ export function GlobalOnboardingView({ data }: { data: Row }) {
           {adminTab === "Custom Fields" ? (
             <Panel title="Custom Fields">
               <CustomFieldForm companies={companies} />
-              <div className="mt-5"><RecordsList title="Custom Field Values" records={customFieldValues} /></div>
+              <div className="mt-5"><GroupedCustomFieldValues records={customFieldValues} /></div>
             </Panel>
           ) : null}
         </>

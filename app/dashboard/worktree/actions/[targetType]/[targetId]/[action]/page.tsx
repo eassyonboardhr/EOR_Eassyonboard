@@ -132,7 +132,18 @@ async function getEmployer(targetId: string) {
 
 async function getEmployee(targetId: string, session: PortalSession) {
   const supabase = getSupabaseAdmin();
-  const [{ data: employee }, { data: compensation }, { data: billing }, { data: profile }, { data: progress }, { data: status }, { data: documents }] = await Promise.all([
+  const [
+    { data: employee },
+    { data: compensation },
+    { data: billing },
+    { data: profile },
+    { data: progress },
+    { data: status },
+    { data: documents },
+    { data: leaveRequests },
+    { data: resignations },
+    { data: offboardingCases },
+  ] = await Promise.all([
     supabase
       .from("employees")
       .select("*, employers(id, name)")
@@ -156,11 +167,40 @@ async function getEmployee(targetId: string, session: PortalSession) {
     supabase.from("employee_onboarding_progress").select("*").eq("employee_id", targetId).maybeSingle(),
     supabase.from("employee_onboarding_status").select("*").eq("employee_id", targetId).maybeSingle(),
     supabase.from("employee_documents").select("*").eq("employee_id", targetId).order("uploaded_at", { ascending: false }),
+    supabase
+      .from("leave_requests")
+      .select("id, start_date, end_date, status, total_leave_days, paid_leave_days, lop_days, reason, created_at")
+      .eq("employee_id", targetId)
+      .order("created_at", { ascending: false })
+      .limit(8),
+    supabase
+      .from("resignations")
+      .select("id, status, notice_period_days, calculated_last_working_day, acknowledged_at, employer_notes, admin_notes, rejection_reason, created_at")
+      .eq("employee_id", targetId)
+      .order("created_at", { ascending: false })
+      .limit(5),
+    supabase
+      .from("offboarding_cases")
+      .select("id, status, target_last_working_day, completed_at, access_deactivation_confirmed_at, access_deactivation_confirmed_by, employer_notes, admin_notes, rejection_reason, created_at")
+      .eq("employee_id", targetId)
+      .order("created_at", { ascending: false })
+      .limit(5),
   ]);
 
   if (!employee) return null;
   const signedDocuments = await withScopedEmployeeDocumentUrls(documents ?? [], session);
-  return { employee, compensation, billing, profile, progress, status, documents: signedDocuments };
+  return {
+    employee,
+    compensation,
+    billing,
+    profile,
+    progress,
+    status,
+    documents: signedDocuments,
+    leaveRequests: leaveRequests ?? [],
+    resignations: resignations ?? [],
+    offboardingCases: offboardingCases ?? [],
+  };
 }
 
 export default async function WorktreeActionPage({
@@ -352,6 +392,17 @@ export default async function WorktreeActionPage({
   }
 
   const showFinance = action === "finances" && isAdmin;
+  const documentSummary = data.documents.reduce(
+    (acc, document) => {
+      const status = document.verification_status ?? "Pending";
+      acc.total += 1;
+      if (status === "Approved") acc.approved += 1;
+      if (status === "Rejected") acc.rejected += 1;
+      if (status === "Pending") acc.pending += 1;
+      return acc;
+    },
+    { total: 0, approved: 0, rejected: 0, pending: 0 },
+  );
 
   return (
     <PortalShell
@@ -379,7 +430,7 @@ export default async function WorktreeActionPage({
             <Field label="Start date" value={data.employee.start_date} />
             <Field label="Onboarding Status" value={data.status?.status} />
             <Field label="Completion" value={`${data.progress?.completion_percentage ?? 0}%`} />
-            <Field label="Documents" value={data.documents.length} />
+            <Field label="Documents" value={`${documentSummary.approved}/${documentSummary.total} approved`} />
             <Field label="Notice Period" value={data.employee.notice_period_days ? `${data.employee.notice_period_days} days` : null} />
             <Field label="Employer Setup" value={data.employee.employer_setup_completed_at ? "Completed" : "Pending"} />
             <Field label="Setup Notes" value={data.employee.employer_setup_notes} />
@@ -403,6 +454,12 @@ export default async function WorktreeActionPage({
         {action === "docs" ? (
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <h2 className="text-base font-semibold text-slate-950">Documents</h2>
+            <div className="mt-4 grid gap-3 md:grid-cols-4">
+              <Field label="Total" value={documentSummary.total} />
+              <Field label="Approved" value={documentSummary.approved} />
+              <Field label="Pending" value={documentSummary.pending} />
+              <Field label="Rejected" value={documentSummary.rejected} />
+            </div>
             <div className="mt-4 grid gap-3">
               {data.documents.map((document) => (
                 <div key={document.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
@@ -432,9 +489,20 @@ export default async function WorktreeActionPage({
         {action === "leaves" ? (
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <h2 className="text-base font-semibold text-slate-950">Leave Module</h2>
-            <p className="mt-2 text-sm text-slate-600">
-              Open this employee&apos;s leave calendar and request history in the live leave module.
-            </p>
+            <div className="mt-4 grid gap-3">
+              {data.leaveRequests.map((request) => (
+                <div key={request.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
+                  <p className="font-semibold text-slate-950">
+                    {request.start_date} to {request.end_date} · {request.status}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {request.total_leave_days ?? "-"} day(s) · paid {request.paid_leave_days ?? 0} · LOP {request.lop_days ?? 0}
+                  </p>
+                  {request.reason ? <p className="mt-2 text-xs text-slate-600">{request.reason}</p> : null}
+                </div>
+              ))}
+              {data.leaveRequests.length === 0 ? <p className="text-sm text-slate-500">No leave requests found yet.</p> : null}
+            </div>
             <div className="mt-4">
               <Link href={session.user.role === "employee" ? "/dashboard/employee/leaves" : `/dashboard/leaves/history/${data.employee.id}`} className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white">
                 Open Leaves
@@ -446,12 +514,54 @@ export default async function WorktreeActionPage({
         {action === "resignation" ? (
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <h2 className="text-base font-semibold text-slate-950">Resignation Module</h2>
-            <p className="mt-2 text-sm text-slate-600">
-              Use the resignation workflow for notice period calculation, employer acknowledgement, and last-working-day notices.
-            </p>
+            <div className="mt-4 grid gap-3">
+              {data.resignations.map((resignation) => (
+                <div key={resignation.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
+                  <p className="font-semibold capitalize text-slate-950">{resignation.status.replaceAll("_", " ")}</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Notice {resignation.notice_period_days ?? "-"} days · Last working day {resignation.calculated_last_working_day ?? "not set"}
+                  </p>
+                  {resignation.employer_notes || resignation.admin_notes || resignation.rejection_reason ? (
+                    <p className="mt-2 text-xs text-slate-600">{resignation.employer_notes ?? resignation.admin_notes ?? resignation.rejection_reason}</p>
+                  ) : null}
+                </div>
+              ))}
+              {data.resignations.length === 0 ? <p className="text-sm text-slate-500">No resignation records found yet.</p> : null}
+            </div>
             <div className="mt-4">
               <Link href="/dashboard/resignations" className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white">
                 Open Resignations
+              </Link>
+            </div>
+          </div>
+        ) : null}
+
+        {action === "offboarding" ? (
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="text-base font-semibold text-slate-950">Offboarding Module</h2>
+            <div className="mt-4 grid gap-3">
+              {data.offboardingCases.map((offboarding) => (
+                <div key={offboarding.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
+                  <p className="font-semibold capitalize text-slate-950">{offboarding.status.replaceAll("_", " ")}</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Target LWD {offboarding.target_last_working_day ?? "not set"} · Completed {offboarding.completed_at ? "yes" : "no"} · Access confirmed {offboarding.access_deactivation_confirmed_at ? "yes" : "no"}
+                  </p>
+                  {offboarding.access_deactivation_confirmed_at ? (
+                    <p className="mt-2 text-xs font-semibold text-emerald-700">
+                      Access deactivation confirmed on {offboarding.access_deactivation_confirmed_at}
+                      {offboarding.access_deactivation_confirmed_by ? ` by ${offboarding.access_deactivation_confirmed_by}` : ""}
+                    </p>
+                  ) : null}
+                  {offboarding.employer_notes || offboarding.admin_notes || offboarding.rejection_reason ? (
+                    <p className="mt-2 text-xs text-slate-600">{offboarding.employer_notes ?? offboarding.admin_notes ?? offboarding.rejection_reason}</p>
+                  ) : null}
+                </div>
+              ))}
+              {data.offboardingCases.length === 0 ? <p className="text-sm text-slate-500">No offboarding records found yet.</p> : null}
+            </div>
+            <div className="mt-4">
+              <Link href="/dashboard/offboarding" className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white">
+                Open Offboarding
               </Link>
             </div>
           </div>

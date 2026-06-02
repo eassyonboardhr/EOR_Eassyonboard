@@ -132,7 +132,14 @@ export default async function EmployerTeamsPage() {
                 </details>
 
                 <div className="mt-4">
-                  <p className="text-sm font-semibold text-slate-950">Members</p>
+                  <p className="text-sm font-semibold text-slate-950">Manager and members</p>
+                  {manager ? (
+                    <div className="mt-3 rounded-xl border border-blue-100 bg-blue-50 p-3">
+                      <p className="text-xs font-bold uppercase tracking-[0.12em] text-blue-600">Team head</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-950">{manager.full_name ?? manager.email}</p>
+                      <p className="text-xs text-slate-500">{manager.job_title ?? "Manager"}</p>
+                    </div>
+                  ) : null}
                   <div className="mt-3 grid gap-2">
                     {teamMembers.map((member) => {
                       const employee = employees.find((item) => item.id === member.employee_id);
@@ -158,7 +165,7 @@ export default async function EmployerTeamsPage() {
                   <input type="hidden" name="team_id" value={team.id} />
                   <SelectEmployee name="employee_id" employees={employees} includeEmpty />
                   <input name="role_in_team" placeholder="Role in team" className="h-10 rounded-xl border border-slate-300 px-3 text-sm" />
-                  <button className="h-10 rounded-xl bg-blue-700 px-4 text-sm font-semibold text-white">Add</button>
+                  <button className="h-10 rounded-xl bg-blue-700 px-4 text-sm font-semibold text-white">Add / Move</button>
                 </form>
               </div>
             );

@@ -117,6 +117,13 @@ export async function addTeamMemberAction(formData: FormData) {
   await assertEmployeeScope(employeeId, employerId);
 
   const supabase = getSupabaseAdmin();
+  const { error: deleteError } = await supabase
+    .from("team_members")
+    .delete()
+    .eq("employee_id", employeeId)
+    .neq("team_id", teamId);
+  if (deleteError) throw new Error(deleteError.message);
+
   await supabase.from("team_members").upsert(
     {
       team_id: teamId,
@@ -126,7 +133,7 @@ export async function addTeamMemberAction(formData: FormData) {
     { onConflict: "team_id,employee_id" },
   );
   await supabase.from("employees").update({ team_id: teamId }).eq("id", employeeId);
-  await writeAudit(session.user, "add_team_member", "team", teamId, { employee_id: employeeId });
+  await writeAudit(session.user, "move_team_member", "team", teamId, { employee_id: employeeId });
   revalidateTeams();
 }
 

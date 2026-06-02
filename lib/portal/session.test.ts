@@ -13,7 +13,9 @@ vi.mock("next/navigation", () => ({
   },
 }));
 
-function createSessionSupabaseMock() {
+function createSessionSupabaseMock({
+  invitedEmployee = null as { id: string; employer_id: string } | null,
+} = {}) {
   const inserts: Array<{ table: string; payload: Record<string, unknown> }> = [];
   const updates: Array<{ table: string; payload: Record<string, unknown> }> = [];
 
@@ -23,6 +25,10 @@ function createSessionSupabaseMock() {
       eq: vi.fn(() => query),
       is: vi.fn(() => query),
       maybeSingle: vi.fn(async () => {
+        if (name === "employees") {
+          return { data: invitedEmployee, error: null };
+        }
+
         if (name === "employers") {
           return {
             data: {
@@ -43,9 +49,9 @@ function createSessionSupabaseMock() {
           clerk_user_id: "clerk_invitee",
           email: "invitee@example.com",
           full_name: "Invitee",
-          role: "employer_admin",
+          role: invitedEmployee ? "employee" : "employer_admin",
           status: "active",
-          employer_id: "employer_1",
+          employer_id: invitedEmployee ? null : "employer_1",
         },
         error: null,
       })),
@@ -100,6 +106,32 @@ describe("portal session employer invitation bootstrap", () => {
         role: "employer_admin",
         status: "active",
         employer_id: "employer_1",
+      }),
+    });
+  });
+
+  test("marks employee invite accepted and onboarding started on first linked login", async () => {
+    const supabase = createSessionSupabaseMock({
+      invitedEmployee: { id: "employee_1", employer_id: "employer_1" },
+    });
+    getSupabaseAdmin.mockReturnValue(supabase.client);
+    const { getPortalSession } = await import("@/lib/portal/session");
+
+    const session = await getPortalSession();
+
+    expect(session.user.role).toBe("employee");
+    expect(supabase.updates).toContainEqual({
+      table: "employees",
+      payload: expect.objectContaining({
+        portal_user_id: "portal_user_1",
+        status: "active",
+      }),
+    });
+    expect(supabase.updates).toContainEqual({
+      table: "employee_requests",
+      payload: expect.objectContaining({
+        invite_accepted_at: expect.any(String),
+        onboarding_started_at: expect.any(String),
       }),
     });
   });

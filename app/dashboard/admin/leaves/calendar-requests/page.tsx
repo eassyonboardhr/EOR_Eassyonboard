@@ -17,11 +17,31 @@ function statusTone(status: string) {
 }
 
 function PayloadPreview({ payload }: { payload: unknown }) {
+  const summary = summarizePayload(payload);
   return (
-    <pre className="max-h-36 overflow-auto rounded-xl bg-slate-50 p-3 text-xs text-slate-600">
-      {JSON.stringify(payload, null, 2)}
-    </pre>
+    <div className="rounded-xl border border-purple-100 bg-purple-50 p-3 text-xs text-purple-900">
+      <p className="font-bold">{summary}</p>
+      <details className="mt-2">
+        <summary className="cursor-pointer font-semibold text-blue-700">Inspect payload</summary>
+        <pre className="mt-2 max-h-36 overflow-auto rounded-lg bg-white p-2 text-slate-600">{JSON.stringify(payload, null, 2)}</pre>
+      </details>
+    </div>
   );
+}
+
+function summarizePayload(payload: unknown) {
+  if (!payload || typeof payload !== "object") return "No proposed values";
+  const row = payload as Record<string, unknown>;
+  if (Array.isArray(row.weekdays)) {
+    const labels = row.weekdays
+      .map((day) => ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][Number(day)] ?? String(day))
+      .join(", ");
+    return `Set weekly offs to ${labels || "none"}`;
+  }
+  if (row.previous_date && row.date) return `Edit holiday from ${formatDate(String(row.previous_date))} to ${formatDate(String(row.date))}`;
+  if (row.date && row.name) return `${String(row.name)} on ${formatDate(String(row.date))}`;
+  if (row.date && row.override_type) return `${String(row.override_type).replaceAll("_", " ")} on ${formatDate(String(row.date))}`;
+  return "Calendar policy update";
 }
 
 export default async function AdminHolidayCalendarRequestsPage() {
@@ -70,7 +90,14 @@ export default async function AdminHolidayCalendarRequestsPage() {
                     </span>
                     {request.admin_notes ? <p className="mt-2 text-xs text-slate-500">{request.admin_notes}</p> : null}
                   </td>
-                  <td className="px-4 py-3"><PayloadPreview payload={request.proposed_payload} /></td>
+                  <td className="px-4 py-3">
+                    <PayloadPreview payload={request.proposed_payload} />
+                    {request.status === "pending" ? (
+                      <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                        Admin preview: approving this request writes only future-effective company calendar records and sends linked notices to active employees.
+                      </div>
+                    ) : null}
+                  </td>
                   <td className="px-4 py-3">
                     {request.status === "pending" ? (
                       <div className="grid gap-2">

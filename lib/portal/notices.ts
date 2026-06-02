@@ -10,6 +10,7 @@ export async function getNoticesCenterData(
 ) {
   const supabase = getSupabaseAdmin();
   const tab = Array.isArray(filters.tab) ? filters.tab[0] : filters.tab;
+  const category = Array.isArray(filters.category) ? filters.category[0] : filters.category;
 
   let query = supabase
     .from("notice_recipients")
@@ -37,11 +38,29 @@ export async function getNoticesCenterData(
 
   if (error) throw new Error(error.message);
 
+  const filteredRecipients =
+    category && category !== "all"
+      ? (recipients ?? []).filter((recipient) => recipient.notices?.category === category)
+      : recipients ?? [];
+
   return {
     tab: tab ?? "all",
+    category: category ?? "all",
     recipients: tab === "acknowledgement"
-      ? (recipients ?? []).filter((recipient) => !recipient.acknowledged_at && recipient.notices?.requires_acknowledgement)
-      : recipients ?? [],
+      ? filteredRecipients.filter((recipient) => !recipient.acknowledged_at && recipient.notices?.requires_acknowledgement)
+      : filteredRecipients,
     sentNotices: sentNotices ?? [],
   };
+}
+
+export async function getUnreadNoticeCount(session: PortalSession) {
+  const supabase = getSupabaseAdmin();
+  const { count, error } = await supabase
+    .from("notice_recipients")
+    .select("id", { count: "exact", head: true })
+    .eq("recipient_user_id", session.user.id)
+    .is("read_at", null);
+
+  if (error) return 0;
+  return count ?? 0;
 }

@@ -34,11 +34,28 @@ function statusTone(status: string) {
 }
 
 function PayloadPreview({ payload }: { payload: unknown }) {
+  const summary = summarizePayload(payload);
   return (
-    <pre className="max-h-28 overflow-auto rounded-xl bg-slate-50 p-3 text-xs text-slate-600">
-      {JSON.stringify(payload, null, 2)}
-    </pre>
+    <div className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-xs text-slate-600">
+      <p className="font-bold text-slate-800">{summary}</p>
+      <details className="mt-2">
+        <summary className="cursor-pointer font-semibold text-blue-700">Raw payload</summary>
+        <pre className="mt-2 max-h-28 overflow-auto">{JSON.stringify(payload, null, 2)}</pre>
+      </details>
+    </div>
   );
+}
+
+function summarizePayload(payload: unknown) {
+  if (!payload || typeof payload !== "object") return "No proposed values";
+  const row = payload as Record<string, unknown>;
+  if (Array.isArray(row.weekdays)) {
+    return `Weekly offs: ${row.weekdays.map((day) => weekdays[Number(day)]?.[1] ?? day).join(", ") || "none"}`;
+  }
+  if (row.date && row.name) return `${String(row.name)} on ${formatDate(String(row.date))}`;
+  if (row.date && row.override_type) return `${String(row.override_type).replaceAll("_", " ")} on ${formatDate(String(row.date))}`;
+  if (row.previous_date && row.date) return `Move ${formatDate(String(row.previous_date))} to ${formatDate(String(row.date))}`;
+  return "Calendar policy update";
 }
 
 export default async function EmployerHolidayCalendarPage() {

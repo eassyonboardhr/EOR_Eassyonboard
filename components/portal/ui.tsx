@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { UserButton } from "@clerk/nextjs";
+import { getUnreadNoticeCount } from "@/lib/portal/notices";
 import type { PortalCounts, PortalSession } from "@/lib/portal/types";
 
 type NavItem = {
@@ -16,13 +17,15 @@ const navByRole = {
   employee: "/dashboard/employee",
 };
 
-function navSections(session: PortalSession): NavItem[] {
+function navSections(session: PortalSession, unreadNotices = 0): NavItem[] {
+  const noticeBadge = unreadNotices > 0 ? String(Math.min(unreadNotices, 99)) : undefined;
+
   if (session.user.role === "employee") {
     return [
       { label: "Dashboard", icon: "D", href: dashboardHref(session) },
       { label: "Attendance", icon: "A", href: `${dashboardHref(session)}#attendance` },
       { label: "Leaves", icon: "L", href: "/dashboard/employee/leaves" },
-      { label: "Notices", icon: "N", href: "/dashboard/notices" },
+      { label: "Notices", icon: "N", href: "/dashboard/notices", badge: noticeBadge },
       { label: "Resignations", icon: "R", href: "/dashboard/resignations" },
       { label: "Offboarding", icon: "O", href: "/dashboard/offboarding" },
       { label: "Messages", icon: "M", href: `${dashboardHref(session)}#messages` },
@@ -38,7 +41,7 @@ function navSections(session: PortalSession): NavItem[] {
       { label: "Teams", icon: "TM", href: "/dashboard/employer/teams" },
       { label: "Worktree", icon: "WT", href: "/dashboard/worktree" },
       { label: "Leaves", icon: "L", href: "/dashboard/employer/leaves" },
-      { label: "Notices", icon: "N", href: "/dashboard/notices" },
+      { label: "Notices", icon: "N", href: "/dashboard/notices", badge: noticeBadge },
       { label: "Onboarding", icon: "ON", href: "/dashboard/onboarding" },
       { label: "Resignations", icon: "R", href: "/dashboard/resignations" },
       { label: "Offboarding", icon: "O", href: "/dashboard/offboarding" },
@@ -53,7 +56,7 @@ function navSections(session: PortalSession): NavItem[] {
     { label: "Employees", icon: "EE", href: `${dashboardHref(session)}#employees` },
     { label: "Worktree", icon: "WT", href: "/dashboard/worktree" },
     { label: "Leaves", icon: "L", href: "/dashboard/admin/leaves" },
-    { label: "Notices", icon: "N", href: "/dashboard/notices" },
+    { label: "Notices", icon: "N", href: "/dashboard/notices", badge: noticeBadge },
     { label: "Onboarding", icon: "ON", href: "/dashboard/onboarding" },
     { label: "Resignations", icon: "R", href: "/dashboard/resignations" },
     { label: "Offboarding", icon: "O", href: "/dashboard/offboarding" },
@@ -66,7 +69,7 @@ function dashboardHref(session: PortalSession) {
   return navByRole[session.user.role] ?? "/dashboard";
 }
 
-export function PortalShell({
+export async function PortalShell({
   session,
   title,
   subtitle,
@@ -82,7 +85,8 @@ export function PortalShell({
   const homeHref = dashboardHref(session);
   const activeTitle = title.toLowerCase();
   const userName = session.user.full_name ?? session.email;
-  const navigation = navSections(session);
+  const unreadNotices = await getUnreadNoticeCount(session);
+  const navigation = navSections(session, unreadNotices);
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-950 lg:grid lg:grid-cols-[236px_1fr]">
@@ -179,12 +183,14 @@ export function PortalShell({
               >
                 ?
               </button>
-              <span className="relative flex h-9 w-9 items-center justify-center rounded-lg text-slate-500">
+              <Link href="/dashboard/notices" className="relative flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100" aria-label="Notices">
                 N
-                <span className="absolute right-1 top-1 rounded-full bg-rose-600 px-1 text-[9px] font-bold text-white">
-                  12
-                </span>
-              </span>
+                {unreadNotices > 0 ? (
+                  <span className="absolute right-1 top-1 rounded-full bg-rose-600 px-1 text-[9px] font-bold text-white">
+                    {Math.min(unreadNotices, 99)}
+                  </span>
+                ) : null}
+              </Link>
               <div className="hidden text-right sm:block">
                 <p className="text-sm font-semibold text-slate-950">{userName}</p>
                 <p className="text-xs capitalize text-slate-500">{session.user.role.replace("_", " ")}</p>
