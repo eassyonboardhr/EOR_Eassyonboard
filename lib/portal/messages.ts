@@ -90,6 +90,8 @@ export async function resolveMessageRecipient(session: PortalSession, recipientV
   const [kind, id] = recipientValue.split(":");
   if (!kind || !id) throw new Error("Choose a recipient.");
 
+  const sessionEmployerId = await getSessionEmployerId(session);
+
   if (kind === "user") {
     const { data: user } = await supabase
       .from("portal_users")
@@ -101,9 +103,9 @@ export async function resolveMessageRecipient(session: PortalSession, recipientV
     const allowed =
       isPlatformAdmin(session.user.role) ||
       (session.user.role === "employer_admin" && isPlatformAdmin(user.role)) ||
-      (session.user.role === "employee" && (isPlatformAdmin(user.role) || user.employer_id === session.user.employer_id));
+      (session.user.role === "employee" && (isPlatformAdmin(user.role) || Boolean(sessionEmployerId && user.employer_id === sessionEmployerId)));
     if (!allowed) throw new Error("You cannot message that recipient.");
-    return { recipientIds: [user.id], employerId: user.employer_id ?? session.user.employer_id, employeeId: null };
+    return { recipientIds: [user.id], employerId: user.employer_id ?? sessionEmployerId, employeeId: null };
   }
 
   if (kind === "employer" && isPlatformAdmin(session.user.role)) {
@@ -122,7 +124,7 @@ export async function resolveMessageRecipient(session: PortalSession, recipientV
       .select("id, employer_id, portal_user_id")
       .eq("id", id)
       .not("portal_user_id", "is", null);
-    if (session.user.role === "employer_admin") query = query.eq("employer_id", session.user.employer_id ?? "");
+    if (session.user.role === "employer_admin") query = query.eq("employer_id", sessionEmployerId ?? "");
     if (session.user.role === "employee") query = query.eq("portal_user_id", session.user.id);
     const { data: employee } = await query.maybeSingle();
     if (!employee?.portal_user_id) throw new Error("Employee recipient is not available.");
@@ -130,6 +132,18 @@ export async function resolveMessageRecipient(session: PortalSession, recipientV
   }
 
   throw new Error("You cannot message that recipient.");
+}
+
+async function getSessionEmployerId(session: PortalSession) {
+  if (session.user.employer_id) return session.user.employer_id;
+  if (session.user.role !== "employee") return null;
+  const supabase = getSupabaseAdmin();
+  const { data: employee } = await supabase
+    .from("employees")
+    .select("employer_id")
+    .eq("portal_user_id", session.user.id)
+    .maybeSingle();
+  return employee?.employer_id ?? null;
 }
 
 export async function getMessagesData(session: PortalSession, threadId?: string) {

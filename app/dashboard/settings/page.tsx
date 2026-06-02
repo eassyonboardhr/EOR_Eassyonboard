@@ -20,9 +20,9 @@ export default async function SettingsPage() {
               <option value="dark">Dark</option>
             </select>
           </label>
-          <div className="grid gap-2 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-            <label className="flex items-center gap-2"><input type="checkbox" name="email_summary" defaultChecked={Boolean(preferences.email_summary)} /> Email summary later</label>
+          <div className="grid gap-2 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
             <label className="flex items-center gap-2"><input type="checkbox" name="important_only" defaultChecked={Boolean(preferences.important_only)} /> Show important alerts first</label>
+            <p className="text-xs text-slate-500 dark:text-slate-400">Email digests will be added after in-app notification workflows are stable.</p>
           </div>
           <div className="md:col-span-2"><SubmitButton>Save Settings</SubmitButton></div>
         </form>
@@ -30,4 +30,3 @@ export default async function SettingsPage() {
     </PortalShell>
   );
 }
-

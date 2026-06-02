@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { PortalShell } from "@/components/portal/ui";
 import { withScopedEmployeeDocumentUrls } from "@/lib/portal/document-access";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -217,6 +217,9 @@ export default async function WorktreeActionPage({
   const { targetType, targetId, action } = await params;
 
   if (targetType !== "employer" && targetType !== "employee") notFound();
+  if (action === "finances") {
+    redirect(`/dashboard/finances?${targetType === "employer" ? "employer" : "employee"}=${targetId}`);
+  }
 
   const isAdmin = isPlatformAdmin(session.user.role);
   const actionTitle = label(action);

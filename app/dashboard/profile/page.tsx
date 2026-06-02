@@ -30,6 +30,7 @@ export default async function ProfilePage() {
                 <div className="mt-3 grid gap-4 md:grid-cols-2">
                   <TextInput name="aadhaar_number" label="Aadhaar number" />
                   <TextInput name="pan_number" label="PAN number" />
+                  <TextInput name="account_holder_name" label="Account holder name" />
                   <TextInput name="account_number" label="Bank account number" />
                   <TextInput name="ifsc_code" label="IFSC code" />
                   <TextInput name="bank_name" label="Bank name" />
