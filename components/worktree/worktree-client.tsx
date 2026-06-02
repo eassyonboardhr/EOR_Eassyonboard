@@ -329,7 +329,7 @@ function DetailsPanel({
 
     return employeeActions.filter((action) => {
       if (action !== "finances") return true;
-      return role === "super_admin" || role === "admin";
+      return role === "super_admin" || role === "admin" || role === "employer_admin";
     });
   }, [role, selected]);
 
