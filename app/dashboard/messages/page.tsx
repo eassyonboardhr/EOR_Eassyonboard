@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import Link from "next/link";
-import { createMessageThreadAction, replyMessageThreadAction } from "@/lib/portal/actions/messages";
+import { createMessageThreadAction, replyMessageThreadAction, updateMessageThreadStateAction } from "@/lib/portal/actions/messages";
 import { getMessagesData } from "@/lib/portal/messages";
 import { requirePortalRole } from "@/lib/portal/session";
 import { EmptyState, Panel, PortalShell, SubmitButton, TextArea, TextInput, formatDate } from "@/components/portal/ui";
@@ -14,7 +14,9 @@ export default async function MessagesPage({
   const params = await searchParams;
   const threadId = Array.isArray(params.thread) ? params.thread[0] : params.thread;
   const recipientParam = Array.isArray(params.recipient) ? params.recipient[0] : params.recipient;
-  const data = await getMessagesData(session, threadId);
+  const query = Array.isArray(params.q) ? params.q[0] : params.q;
+  const archived = (Array.isArray(params.archived) ? params.archived[0] : params.archived) === "1";
+  const data = await getMessagesData(session, threadId, { query, archived });
 
   return (
     <PortalShell session={session} title="Messages" subtitle="Two-way conversations between admins, employers, and employees." wide>
@@ -39,12 +41,30 @@ export default async function MessagesPage({
             </form>
           </Panel>
 
-          <Panel title="Inbox">
+          <Panel title={archived ? "Archived" : "Inbox"}>
+            <form className="mb-3 grid gap-2">
+              <input type="hidden" name="archived" value={archived ? "1" : "0"} />
+              <label className="grid gap-1 text-sm font-medium text-slate-700 dark:text-slate-200">
+                Search messages
+                <input
+                  name="q"
+                  defaultValue={query ?? ""}
+                  placeholder="Subject or message text"
+                  className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-950"
+                />
+              </label>
+              <div className="flex flex-wrap gap-2">
+                <button className="rounded-xl bg-blue-700 px-3 py-2 text-xs font-semibold text-white">Search</button>
+                <Link href={archived ? "/dashboard/messages" : "/dashboard/messages?archived=1"} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 dark:border-slate-700 dark:text-slate-200">
+                  {archived ? "Open inbox" : "View archived"}
+                </Link>
+              </div>
+            </form>
             <div className="grid gap-2">
               {data.threads.map((thread: any) => (
                 <Link
                   key={thread.id}
-                  href={`/dashboard/messages?thread=${thread.id}`}
+                  href={`/dashboard/messages?thread=${thread.id}${archived ? "&archived=1" : ""}${query ? `&q=${encodeURIComponent(query)}` : ""}`}
                   className={`rounded-xl border p-3 text-sm transition hover:border-blue-200 hover:bg-blue-50 ${
                     thread.unread ? "border-blue-200 bg-blue-50" : "border-slate-200 bg-white"
                   }`}
@@ -56,7 +76,7 @@ export default async function MessagesPage({
                   <p className="mt-1 text-xs text-slate-500">{formatDate(thread.latestEntryAt)}</p>
                 </Link>
               ))}
-              {data.threads.length === 0 ? <EmptyState>No message threads yet.</EmptyState> : null}
+              {data.threads.length === 0 ? <EmptyState>{archived ? "No archived message threads found." : "No message threads found."}</EmptyState> : null}
             </div>
           </Panel>
         </div>
@@ -70,6 +90,22 @@ export default async function MessagesPage({
                     {participant.portal_users?.full_name ?? participant.portal_users?.email ?? participant.role_snapshot}
                   </span>
                 ))}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <form action={updateMessageThreadStateAction}>
+                  <input type="hidden" name="thread_id" value={data.selectedThread.id} />
+                  <button name="state_action" value="read" className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 dark:border-slate-700 dark:text-slate-200">Mark read</button>
+                </form>
+                <form action={updateMessageThreadStateAction}>
+                  <input type="hidden" name="thread_id" value={data.selectedThread.id} />
+                  <button name="state_action" value="unread" className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 dark:border-slate-700 dark:text-slate-200">Mark unread</button>
+                </form>
+                <form action={updateMessageThreadStateAction}>
+                  <input type="hidden" name="thread_id" value={data.selectedThread.id} />
+                  <button name="state_action" value={archived ? "restore" : "archive"} className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+                    {archived ? "Restore thread" : "Archive thread"}
+                  </button>
+                </form>
               </div>
               <div className="grid max-h-[560px] gap-3 overflow-y-auto pr-2">
                 {data.entries.map((entry: any) => {

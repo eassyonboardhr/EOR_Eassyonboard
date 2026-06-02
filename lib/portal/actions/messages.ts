@@ -76,3 +76,34 @@ export async function replyMessageThreadAction(formData: FormData) {
   await writeAudit(session.user, "reply_message_thread", "message_thread", threadId);
   revalidatePath("/dashboard/messages");
 }
+
+export async function updateMessageThreadStateAction(formData: FormData) {
+  const session = await getPortalSession();
+  ensureActivePortalSession(session);
+  const threadId = requireString(formData, "thread_id");
+  const action = requireString(formData, "state_action");
+  if (!["archive", "restore", "read", "unread"].includes(action)) {
+    throw new Error("Invalid message action.");
+  }
+
+  const supabase = getSupabaseAdmin();
+  const payload =
+    action === "archive"
+      ? { archived_at: new Date().toISOString() }
+      : action === "restore"
+        ? { archived_at: null }
+        : action === "read"
+          ? { last_read_at: new Date().toISOString() }
+          : { last_read_at: null };
+
+  const { data: participant } = await from(supabase, "message_participants")
+    .update(payload)
+    .eq("thread_id", threadId)
+    .eq("portal_user_id", session.user.id)
+    .select("id")
+    .maybeSingle();
+  if (!participant) throw new Error("You cannot update this thread.");
+
+  await writeAudit(session.user, `message_thread_${action}`, "message_thread", threadId);
+  revalidatePath("/dashboard/messages");
+}

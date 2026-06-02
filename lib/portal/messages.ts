@@ -146,15 +146,17 @@ async function getSessionEmployerId(session: PortalSession) {
   return employee?.employer_id ?? null;
 }
 
-export async function getMessagesData(session: PortalSession, threadId?: string) {
+export async function getMessagesData(session: PortalSession, threadId?: string, options?: { query?: string; archived?: boolean }) {
   const supabase = getSupabaseAdmin();
   const [recipients, { data: participantRows }] = await Promise.all([
     getMessageRecipients(session),
     from(supabase, "message_participants")
-      .select("*, message_threads(*, message_entries(id, created_at, sender_id))")
+      .select("*, message_threads(*, message_entries(id, created_at, sender_id, body))")
       .eq("portal_user_id", session.user.id)
       .order("created_at", { ascending: false }),
   ]);
+  const normalizedQuery = normalizeSearch(options?.query);
+  const showArchived = Boolean(options?.archived);
 
   const threads = (participantRows ?? [])
     .map((participant: any) => {
@@ -162,9 +164,18 @@ export async function getMessagesData(session: PortalSession, threadId?: string)
       const entries = thread?.message_entries ?? [];
       const latestEntryAt = entries.map((entry: any) => entry.created_at).sort().at(-1) ?? thread?.updated_at;
       const unread = entries.some((entry: any) => entry.sender_id !== session.user.id && (!participant.last_read_at || entry.created_at > participant.last_read_at));
-      return { ...thread, participant, latestEntryAt, unread };
+      return { ...thread, participant, latestEntryAt, unread, archived: Boolean(participant.archived_at) };
     })
     .filter(Boolean)
+    .filter((thread: any) => showArchived ? Boolean(thread.participant?.archived_at) : !thread.participant?.archived_at)
+    .filter((thread: any) => {
+      if (!normalizedQuery) return true;
+      const haystack = normalizeSearch([
+        thread.subject,
+        ...(thread.message_entries ?? []).map((entry: any) => entry.body),
+      ].filter(Boolean).join(" "));
+      return haystack.includes(normalizedQuery);
+    })
     .sort((a: any, b: any) => String(b.latestEntryAt ?? "").localeCompare(String(a.latestEntryAt ?? "")));
 
   const selectedThreadId = threadId ?? threads[0]?.id ?? null;
@@ -183,22 +194,29 @@ export async function getMessagesData(session: PortalSession, threadId?: string)
       selectedThread = thread;
       entries = entryRows ?? [];
       participants = participantList ?? [];
-      await from(supabase, "message_participants").update({ last_read_at: new Date().toISOString() }).eq("thread_id", selectedThreadId).eq("portal_user_id", session.user.id);
+      if (!participant.archived_at) {
+        await from(supabase, "message_participants").update({ last_read_at: new Date().toISOString() }).eq("thread_id", selectedThreadId).eq("portal_user_id", session.user.id);
+      }
     }
   }
 
-  return { recipients, threads, selectedThread, entries, participants };
+  return { recipients, threads, selectedThread, entries, participants, query: options?.query ?? "", archived: showArchived };
 }
 
 export async function getUnreadMessageCount(session: PortalSession) {
   const supabase = getSupabaseAdmin();
   const { data: participants } = await from(supabase, "message_participants")
-    .select("thread_id, last_read_at, message_threads(message_entries(created_at, sender_id))")
-    .eq("portal_user_id", session.user.id);
+    .select("thread_id, last_read_at, archived_at, message_threads(message_entries(created_at, sender_id))")
+    .eq("portal_user_id", session.user.id)
+    .is("archived_at", null);
 
   return (participants ?? []).filter((participant: any) =>
     (participant.message_threads?.message_entries ?? []).some(
       (entry: any) => entry.sender_id !== session.user.id && (!participant.last_read_at || entry.created_at > participant.last_read_at),
     ),
   ).length;
+}
+
+function normalizeSearch(value: string | null | undefined) {
+  return (value ?? "").trim().toLowerCase();
 }
