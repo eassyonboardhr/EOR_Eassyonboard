@@ -45,20 +45,8 @@ export function ShellControls({ items, initialTheme }: { items: SearchItem[]; in
     window.localStorage.setItem("eor-theme", nextTheme);
   }
 
-  function toggleSidebar() {
-    document.getElementById("portal-sidebar")?.classList.toggle("lg:hidden");
-  }
-
   return (
     <>
-      <button
-        type="button"
-        onClick={toggleSidebar}
-        className="hidden h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800 lg:flex"
-        aria-label="Toggle navigation"
-      >
-        =
-      </button>
       <button
         type="button"
         onClick={() => setOpen(true)}
@@ -74,10 +62,12 @@ export function ShellControls({ items, initialTheme }: { items: SearchItem[]; in
           setTheme(next);
           applyTheme(next);
         }}
-        className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+        className="flex h-9 items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
         aria-label="Toggle theme"
+        title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
       >
-        {theme === "dark" ? "L" : "D"}
+        <span className="h-2 w-2 rounded-full bg-blue-600 dark:bg-amber-300" />
+        {theme === "dark" ? "Light" : "Dark"}
       </button>
 
       {open ? (
