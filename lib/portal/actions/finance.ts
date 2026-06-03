@@ -93,3 +93,89 @@ export async function mapFinanceEmployeeAction(formData: FormData) {
   revalidatePath("/dashboard/finances");
   revalidatePath("/dashboard/finances/mapping");
 }
+
+export async function markFinanceInvoicePaymentReceivedAction(formData: FormData) {
+  const session = await requireAdmin();
+  const invoiceId = value(formData, "invoiceId");
+  const receivedAt = value(formData, "receivedAt") ?? new Date().toISOString().slice(0, 10);
+  const notes = value(formData, "notes");
+  const syncUrl = process.env.INVOICE_GENERATOR_STATUS_SYNC_URL;
+  const syncSecret = process.env.INVOICE_GENERATOR_SYNC_SECRET;
+
+  if (!invoiceId) {
+    throw new Error("Invoice is required.");
+  }
+  if (!syncUrl || !syncSecret) {
+    throw new Error("Invoice Generator status sync is not configured.");
+  }
+
+  const supabase = getSupabaseAdmin() as any;
+  const { data: invoice, error: invoiceError } = await supabase
+    .from("finance_invoices")
+    .select("*")
+    .eq("id", invoiceId)
+    .single();
+  if (invoiceError) throw new Error(invoiceError.message);
+  if (!invoice.external_invoice_id) {
+    throw new Error("Invoice Generator source id is missing.");
+  }
+
+  const response = await fetch(syncUrl, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-invoice-generator-sync-secret": syncSecret,
+    },
+    body: JSON.stringify({
+      source: invoice.source_key ?? "invoice_generator",
+      externalInvoiceId: invoice.external_invoice_id,
+      status: "received",
+      paymentReceivedAt: receivedAt,
+      notes,
+    }),
+  });
+  const result = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(result?.error ?? "Invoice Generator status sync failed.");
+  }
+
+  const receivedIso = new Date(`${receivedAt}T00:00:00.000Z`).toISOString();
+  const { error: updateError } = await supabase
+    .from("finance_invoices")
+    .update({
+      status: "received",
+      payment_received_at: receivedIso,
+      payment_received_by: session.user.id,
+      payment_received_notes: notes,
+      last_source_status: "received",
+      last_status_synced_at: new Date().toISOString(),
+    })
+    .eq("id", invoice.id);
+  if (updateError) throw new Error(updateError.message);
+
+  const { error: paymentError } = await supabase.from("finance_invoice_payments").upsert({
+    source_key: invoice.source_key ?? "invoice_generator",
+    external_payment_id: `eor_received_${invoice.external_invoice_id}`,
+    invoice_id: invoice.id,
+    external_invoice_id: invoice.external_invoice_id,
+    external_company_id: invoice.external_company_id,
+    employer_id: invoice.employer_id,
+    payment_date: receivedAt,
+    payment_month: invoice.month_key,
+    usd_inr_rate: 0,
+    notes: notes ?? "Marked payment received in EOR Portal",
+  }, { onConflict: "source_key,external_payment_id" });
+  if (paymentError) throw new Error(paymentError.message);
+
+  await supabase.from("audit_events").insert({
+    actor_user_id: session.user.id,
+    employer_id: session.user.employer_id,
+    action: "mark_finance_invoice_payment_received",
+    entity_type: "finance_invoice",
+    entity_id: invoice.id,
+    metadata: { externalInvoiceId: invoice.external_invoice_id, result },
+  });
+
+  revalidatePath("/dashboard/finances");
+  revalidatePath("/dashboard/finances/mapping");
+}

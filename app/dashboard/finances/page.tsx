@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { getFinancesData } from "@/lib/portal/finances";
+import { markFinanceInvoicePaymentReceivedAction } from "@/lib/portal/actions/finance";
 import { isPlatformAdmin, requirePortalRole } from "@/lib/portal/session";
 import { EmptyState, Panel, PortalShell, formatDate } from "@/components/portal/ui";
 import Link from "next/link";
@@ -16,6 +17,18 @@ function inrCents(value: number | string | null | undefined) {
   return money(Number(value ?? 0) / 100, "INR");
 }
 
+function formatInvoiceStatus(status: string | null | undefined, admin: boolean) {
+  if (status === "generated" || status === "sent") return "Raised / Sent";
+  if (status === "received") return "Payment received";
+  if (status === "cashed_out") return admin ? "Cashed out" : "Payment received";
+  if (status === "draft") return "Draft";
+  return status ?? "Unknown";
+}
+
+function todayIso() {
+  return new Date().toISOString().slice(0, 10);
+}
+
 export default async function FinancesPage({
   searchParams,
 }: {
@@ -25,6 +38,7 @@ export default async function FinancesPage({
   const params = await searchParams;
   const data = await getFinancesData(session, params);
   const admin = isPlatformAdmin(session.user.role);
+  const employeeFilter = Array.isArray(params.employee) ? params.employee[0] : params.employee;
 
   return (
     <PortalShell session={session} title="Finances" subtitle="Role-aware salary and employer billing summaries with strict privacy boundaries." wide>
@@ -71,7 +85,7 @@ export default async function FinancesPage({
                       <td className="py-3 pr-4 font-semibold">{usdCents(row.billed_total_usd_cents)}</td>
                       <td className="py-3 pr-4">USD</td>
                       <td className="py-3 pr-4">{row.finance_invoices?.month_key ?? row.external_invoice_id}</td>
-                      <td className="py-3 pr-4">{row.finance_invoices?.status ?? row.sync_status}</td>
+                      <td className="py-3 pr-4">{formatInvoiceStatus(row.finance_invoices?.status ?? row.sync_status, admin)}</td>
                     </tr>
                   ))}
                   {data.billing.map((row: any) => (
@@ -86,10 +100,13 @@ export default async function FinancesPage({
                   {session.user.role === "employee" ? data.salaryPayments.map((row: any) => (
                     <tr key={row.id} className="border-b border-slate-100">
                       <td className="py-3 pr-4">My monthly pay</td>
-                      <td className="py-3 pr-4 font-semibold">{inrCents(row.salary_paid_inr_cents)}</td>
+                      <td className="py-3 pr-4 font-semibold">{inrCents(row.actual_paid_inr_cents ?? row.salary_paid_inr_cents)}</td>
                       <td className="py-3 pr-4">INR</td>
                       <td className="py-3 pr-4">{row.month_key}</td>
-                      <td className="py-3 pr-4">{row.paid_status ? "Paid" : "Pending"}</td>
+                      <td className="py-3 pr-4">
+                        {row.paid_status ? "Paid" : "Pending"}
+                        <p className="text-xs text-slate-500">PF {inrCents(row.pf_inr_cents)} · TDS {inrCents(row.tds_inr_cents)}</p>
+                      </td>
                     </tr>
                   )) : null}
                   {session.user.role === "employee" && data.salaryPayments.length === 0 ? data.compensation.map((row: any) => (
@@ -121,8 +138,9 @@ export default async function FinancesPage({
                         {row.paid_status ? "Paid" : "Pending"}
                       </span>
                     </div>
-                    <p className="mt-2 text-lg font-bold">{inrCents(row.salary_paid_inr_cents)}</p>
+                    <p className="mt-2 text-lg font-bold">{inrCents(row.actual_paid_inr_cents ?? row.salary_paid_inr_cents)}</p>
                     <p className="mt-1 text-xs text-slate-500">USD salary basis {usdCents(row.salary_usd_cents)} for {row.month_key}</p>
+                    <p className="mt-1 text-xs text-slate-500">PF {inrCents(row.pf_inr_cents)} · TDS {inrCents(row.tds_inr_cents)} · Salary paid {inrCents(row.salary_paid_inr_cents)}</p>
                   </div>
                 ))}
                 {data.compensation.map((row: any) => (
@@ -147,22 +165,59 @@ export default async function FinancesPage({
         </div>
 
         <Panel title="Invoices and payments">
+          {admin && employeeFilter && employeeFilter !== "all" ? (
+            <div className="mb-4 grid gap-3 md:grid-cols-2">
+              <div className="rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-100">
+                <p className="font-semibold">Employer Billing</p>
+                <p className="mt-1">Invoice rows below show client billing linked to this employee.</p>
+              </div>
+              <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-100">
+                <p className="font-semibold">Employee Pay</p>
+                <p className="mt-1">Employee salary/payment rows above show paid status, INR paid amount, PF, and TDS where synced.</p>
+              </div>
+            </div>
+          ) : null}
           <div className="grid gap-3 lg:grid-cols-2">
             <div className="overflow-x-auto">
               <table className="w-full min-w-[640px] text-left text-sm">
                 <thead className="border-b border-slate-200 text-xs uppercase tracking-[0.12em] text-slate-500">
-                  <tr><th className="py-2 pr-4">Invoice</th><th className="py-2 pr-4">Month</th><th className="py-2 pr-4">Status</th><th className="py-2 pr-4">Total</th></tr>
+                  <tr><th className="py-2 pr-4">Invoice</th><th className="py-2 pr-4">Month</th><th className="py-2 pr-4">Status</th><th className="py-2 pr-4">Total</th>{admin ? <th className="py-2 pr-4">Admin action</th> : null}</tr>
                 </thead>
                 <tbody>
                   {data.invoices.map((invoice: any) => (
                     <tr key={invoice.id} className="border-b border-slate-100">
                       <td className="py-3 pr-4 font-semibold">{invoice.invoice_number}</td>
                       <td className="py-3 pr-4">{invoice.month_key}</td>
-                      <td className="py-3 pr-4">{invoice.status}</td>
+                      <td className="py-3 pr-4">{formatInvoiceStatus(invoice.status, admin)}</td>
                       <td className="py-3 pr-4">{usdCents(invoice.grand_total_usd_cents)}</td>
+                      {admin ? (
+                        <td className="py-3 pr-4">
+                          {invoice.status === "generated" || invoice.status === "sent" ? (
+                            <form action={markFinanceInvoicePaymentReceivedAction} className="flex flex-wrap items-center gap-2">
+                              <input type="hidden" name="invoiceId" value={invoice.id} />
+                              <input
+                                type="date"
+                                name="receivedAt"
+                                defaultValue={todayIso()}
+                                className="h-9 rounded-lg border border-slate-200 px-2 text-xs dark:border-slate-700 dark:bg-slate-950"
+                              />
+                              <input
+                                name="notes"
+                                placeholder="Notes"
+                                className="h-9 w-32 rounded-lg border border-slate-200 px-2 text-xs dark:border-slate-700 dark:bg-slate-950"
+                              />
+                              <button className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700">
+                                Mark received
+                              </button>
+                            </form>
+                          ) : (
+                            <span className="text-xs text-slate-500">{formatInvoiceStatus(invoice.status, admin)}</span>
+                          )}
+                        </td>
+                      ) : null}
                     </tr>
                   ))}
-                  {data.invoices.length === 0 ? <tr><td colSpan={4}><EmptyState>No synced invoices yet.</EmptyState></td></tr> : null}
+                  {data.invoices.length === 0 ? <tr><td colSpan={admin ? 5 : 4}><EmptyState>No synced invoices yet.</EmptyState></td></tr> : null}
                 </tbody>
               </table>
             </div>
