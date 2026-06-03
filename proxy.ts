@@ -5,6 +5,7 @@ const isPublicRoute = createRouteMatcher([
   "/sign-in(.*)",
   "/sign-up(.*)",
   "/request-received",
+  "/api/integrations/invoice-generator/sync",
 ]);
 
 export default clerkMiddleware(async (auth, request) => {

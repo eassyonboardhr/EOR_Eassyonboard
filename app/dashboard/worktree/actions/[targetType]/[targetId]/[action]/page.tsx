@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { PortalShell } from "@/components/portal/ui";
 import { withScopedEmployeeDocumentUrls } from "@/lib/portal/document-access";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -10,6 +10,114 @@ type SearchParams = {
   targetType: "employer" | "employee";
   targetId: string;
   action: string;
+};
+
+type FinanceInvoice = {
+  id: string;
+  invoice_number: string | null;
+  month_key: string | null;
+  status: string | null;
+  grand_total_usd_cents: number | string | null;
+};
+
+type FinanceInvoiceMeta = {
+  invoice_number?: string | null;
+  month_key?: string | null;
+  status?: string | null;
+} | null;
+
+type FinanceLineItem = {
+  id: string;
+  employee_name_snapshot?: string | null;
+  billed_total_usd_cents: number | string | null;
+  finance_invoices?: FinanceInvoiceMeta;
+};
+
+type FinanceStatementRow = {
+  id: string;
+  month_key: string | null;
+  dollar_inward_usd_cents: number | string | null;
+  finance_invoices?: FinanceInvoiceMeta;
+};
+
+type FinanceStatementSummary = {
+  id: string;
+  month_key: string | null;
+  effective_dollar_inward_usd_cents: number | string | null;
+};
+
+type FinanceSalaryPayment = {
+  id: string;
+  month_key: string | null;
+  pf_inr_cents: number | string | null;
+  tds_inr_cents: number | string | null;
+  actual_paid_inr_cents: number | string | null;
+  paid_status: boolean | null;
+};
+
+type EmployerLeaveRequest = {
+  id: string;
+  start_date: string | null;
+  end_date: string | null;
+  status: string | null;
+  total_leave_days: number | string | null;
+  employees?: { full_name?: string | null } | null;
+};
+
+type EmployerEmployeeRequest = {
+  id: string;
+  full_name: string | null;
+  email: string | null;
+  status: string | null;
+  invite_sent_at: string | null;
+  invite_error: string | null;
+};
+
+type EmployerOffboardingCase = {
+  id: string;
+  employee_id: string | null;
+  status: string;
+  target_last_working_day?: string | null;
+};
+
+type EmployerResignation = {
+  id: string;
+  employee_id: string | null;
+  status: string;
+  calculated_last_working_day?: string | null;
+};
+
+type EmployeeLeaveRequest = {
+  id: string;
+  start_date: string | null;
+  end_date: string | null;
+  status: string | null;
+  total_leave_days: number | string | null;
+  paid_leave_days: number | string | null;
+  lop_days: number | string | null;
+  reason: string | null;
+};
+
+type EmployeeResignation = {
+  id: string;
+  status: string;
+  notice_period_days: number | string | null;
+  calculated_last_working_day: string | null;
+  employer_notes: string | null;
+  admin_notes: string | null;
+  rejection_reason: string | null;
+};
+
+type EmployeeOffboardingCase = {
+  id: string;
+  status: string;
+  target_last_working_day: string | null;
+  completed_at: string | null;
+  access_deactivation_confirmed_at: string | null;
+  access_deactivation_confirmed_by: string | null;
+  employer_notes: string | null;
+  admin_notes: string | null;
+  rejection_reason: string | null;
 };
 
 function label(value: string) {
@@ -56,8 +164,30 @@ function money(value: number | string | null | undefined, currency = "USD") {
   }).format(Number(value ?? 0));
 }
 
+function cents(value: number | string | null | undefined, currency = "USD") {
+  return money(Number(value ?? 0) / 100, currency);
+}
+
+function statusLabel(status: string | null | undefined, { showCashout = false } = {}) {
+  if (status === "generated" || status === "sent") return "Raised / Sent";
+  if (status === "received") return "Payment received";
+  if (status === "cashed_out") return showCashout ? "Cashed out" : "Payment received";
+  return status?.replaceAll("_", " ") ?? "Unknown";
+}
+
+function sumCents<T>(rows: T[], selector: (row: T) => number | string | null | undefined) {
+  return rows.reduce((total, row) => total + Number(selector(row) ?? 0), 0);
+}
+
+function employerLifecycleLastWorkingDay(item: EmployerOffboardingCase | EmployerResignation) {
+  return "target_last_working_day" in item
+    ? item.target_last_working_day
+    : (item as EmployerResignation).calculated_last_working_day;
+}
+
 async function getEmployer(targetId: string) {
-  const supabase = getSupabaseAdmin();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Finance sync tables are newer than the generated Supabase types.
+  const supabase = getSupabaseAdmin() as any;
   const [
     { data: employer },
     { count: employeesCount },
@@ -67,6 +197,9 @@ async function getEmployer(targetId: string) {
     { data: leaveRequests },
     { data: offboardingCases },
     { data: resignations },
+    { data: financeInvoices },
+    { data: financeLineItems },
+    { data: financePayments },
   ] = await Promise.all([
     supabase.from("employers").select("*").eq("id", targetId).single(),
     supabase.from("employees").select("id", { count: "exact", head: true }).eq("employer_id", targetId),
@@ -105,12 +238,32 @@ async function getEmployer(targetId: string) {
       .eq("employer_id", targetId)
       .order("created_at", { ascending: false })
       .limit(8),
+    supabase
+      .from("finance_invoices")
+      .select("id, invoice_number, month_key, status, grand_total_usd_cents, payment_received_at, due_date, sync_status")
+      .eq("employer_id", targetId)
+      .eq("sync_status", "synced")
+      .order("month_key", { ascending: false })
+      .limit(8),
+    supabase
+      .from("finance_invoice_line_items")
+      .select("id, employee_id, employee_name_snapshot, billed_total_usd_cents, finance_invoices(invoice_number, month_key, status)")
+      .eq("employer_id", targetId)
+      .eq("sync_status", "synced")
+      .order("created_at", { ascending: false })
+      .limit(12),
+    supabase
+      .from("finance_invoice_payments")
+      .select("id, payment_month, payment_date, external_invoice_id")
+      .eq("employer_id", targetId)
+      .order("payment_month", { ascending: false })
+      .limit(8),
   ]);
 
   if (!employer) return null;
 
   const totals = (billing ?? []).reduce(
-    (acc, row) => {
+    (acc: Record<string, number>, row: { currency?: string | null; monthly_bill_amount?: number | string | null }) => {
       const currency = row.currency ?? "USD";
       acc[currency] = (acc[currency] ?? 0) + Number(row.monthly_bill_amount ?? 0);
       return acc;
@@ -123,15 +276,19 @@ async function getEmployer(targetId: string) {
     employeesCount: employeesCount ?? 0,
     billingTotals: totals,
     company,
-    employeeRequests: employeeRequests ?? [],
-    leaveRequests: leaveRequests ?? [],
-    offboardingCases: offboardingCases ?? [],
-    resignations: resignations ?? [],
+    employeeRequests: (employeeRequests ?? []) as EmployerEmployeeRequest[],
+    leaveRequests: (leaveRequests ?? []) as EmployerLeaveRequest[],
+    offboardingCases: (offboardingCases ?? []) as EmployerOffboardingCase[],
+    resignations: (resignations ?? []) as EmployerResignation[],
+    financeInvoices: (financeInvoices ?? []) as FinanceInvoice[],
+    financeLineItems: (financeLineItems ?? []) as FinanceLineItem[],
+    financePayments: financePayments ?? [],
   };
 }
 
 async function getEmployee(targetId: string, session: PortalSession) {
-  const supabase = getSupabaseAdmin();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Finance sync tables are newer than the generated Supabase types.
+  const supabase = getSupabaseAdmin() as any;
   const [
     { data: employee },
     { data: compensation },
@@ -143,6 +300,10 @@ async function getEmployee(targetId: string, session: PortalSession) {
     { data: leaveRequests },
     { data: resignations },
     { data: offboardingCases },
+    { data: financeLineItems },
+    { data: statementRows },
+    { data: statementSummaries },
+    { data: salaryPayments },
   ] = await Promise.all([
     supabase
       .from("employees")
@@ -185,6 +346,34 @@ async function getEmployee(targetId: string, session: PortalSession) {
       .eq("employee_id", targetId)
       .order("created_at", { ascending: false })
       .limit(5),
+    supabase
+      .from("finance_invoice_line_items")
+      .select("id, employee_id, employee_name_snapshot, billed_total_usd_cents, billing_rate_usd_cents, days_worked, sync_status, finance_invoices(invoice_number, month_key, status)")
+      .eq("employee_id", targetId)
+      .eq("sync_status", "synced")
+      .order("created_at", { ascending: false })
+      .limit(12),
+    supabase
+      .from("finance_employee_statement_rows")
+      .select("id, month_key, dollar_inward_usd_cents, onboarding_advance_usd_cents, reimbursement_usd_cents, appraisal_advance_usd_cents, offboarding_deduction_usd_cents, finance_invoices(invoice_number, status)")
+      .eq("employee_id", targetId)
+      .eq("sync_status", "synced")
+      .order("month_key", { ascending: false })
+      .limit(12),
+    supabase
+      .from("finance_employee_statement_summaries")
+      .select("id, month_key, month_label_snapshot, effective_dollar_inward_usd_cents, monthly_dollar_paid_usd_cents")
+      .eq("employee_id", targetId)
+      .eq("sync_status", "synced")
+      .order("month_key", { ascending: false })
+      .limit(12),
+    supabase
+      .from("finance_employee_salary_payments")
+      .select("id, month_key, salary_usd_cents, salary_paid_inr_cents, pf_inr_cents, tds_inr_cents, actual_paid_inr_cents, paid_status, paid_date")
+      .eq("employee_id", targetId)
+      .eq("sync_status", "synced")
+      .order("month_key", { ascending: false })
+      .limit(12),
   ]);
 
   if (!employee) return null;
@@ -197,9 +386,13 @@ async function getEmployee(targetId: string, session: PortalSession) {
     progress,
     status,
     documents: signedDocuments,
-    leaveRequests: leaveRequests ?? [],
-    resignations: resignations ?? [],
-    offboardingCases: offboardingCases ?? [],
+    leaveRequests: (leaveRequests ?? []) as EmployeeLeaveRequest[],
+    resignations: (resignations ?? []) as EmployeeResignation[],
+    offboardingCases: (offboardingCases ?? []) as EmployeeOffboardingCase[],
+    financeLineItems: (financeLineItems ?? []) as FinanceLineItem[],
+    statementRows: (statementRows ?? []) as FinanceStatementRow[],
+    statementSummaries: (statementSummaries ?? []) as FinanceStatementSummary[],
+    salaryPayments: (salaryPayments ?? []) as FinanceSalaryPayment[],
   };
 }
 
@@ -217,9 +410,6 @@ export default async function WorktreeActionPage({
   const { targetType, targetId, action } = await params;
 
   if (targetType !== "employer" && targetType !== "employee") notFound();
-  if (action === "finances") {
-    redirect(`/dashboard/finances?${targetType === "employer" ? "employer" : "employee"}=${targetId}`);
-  }
 
   const isAdmin = isPlatformAdmin(session.user.role);
   const actionTitle = label(action);
@@ -289,16 +479,77 @@ export default async function WorktreeActionPage({
 
           {action === "finances" ? (
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <h2 className="text-base font-semibold text-slate-950">Monthly Billing Summary</h2>
-              <div className="mt-4 grid gap-3 md:grid-cols-3">
-                {Object.entries(data.billingTotals).length > 0 ? (
-                  Object.entries(data.billingTotals).map(([currency, total]) => (
-                    <Field key={currency} label={currency} value={money(total, currency)} />
-                  ))
-                ) : (
-                  <p className="text-sm text-slate-500">No employer billing records found yet.</p>
-                )}
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-base font-semibold text-slate-950">Synced Finance Summary</h2>
+                  <p className="mt-1 text-sm text-slate-500">Invoice Generator billing and payment status for this employer.</p>
+                </div>
+                <Link href={`/dashboard/finances?employer=${data.employer.id}`} className="rounded-xl border border-blue-200 px-4 py-2 text-sm font-semibold text-blue-700">
+                  Open Finance Page
+                </Link>
               </div>
+              <div className="mt-4 grid gap-3 md:grid-cols-3">
+                <Field label="Total invoiced" value={cents(sumCents(data.financeInvoices, (row) => row.grand_total_usd_cents))} />
+                <Field label="Pending payment" value={cents(sumCents(data.financeInvoices.filter((row) => row.status === "generated" || row.status === "sent"), (row) => row.grand_total_usd_cents))} />
+                <Field label="Payment received" value={cents(sumCents(data.financeInvoices.filter((row) => row.status === "received"), (row) => row.grand_total_usd_cents))} />
+                <Field label="Cashed out" value={cents(sumCents(data.financeInvoices.filter((row) => row.status === "cashed_out"), (row) => row.grand_total_usd_cents))} />
+                <Field label="Invoice count" value={data.financeInvoices.length} />
+                <Field label="Payment records" value={data.financePayments.length} />
+              </div>
+              {data.financeInvoices.length > 0 ? (
+                <div className="mt-5 overflow-hidden rounded-xl border border-slate-200">
+                  <table className="min-w-full divide-y divide-slate-200 text-sm">
+                    <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+                      <tr>
+                        <th className="px-4 py-3">Invoice</th>
+                        <th className="px-4 py-3">Month</th>
+                        <th className="px-4 py-3">Status</th>
+                        <th className="px-4 py-3 text-right">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 bg-white">
+                      {data.financeInvoices.map((invoice) => (
+                        <tr key={invoice.id}>
+                          <td className="px-4 py-3 font-semibold text-slate-950">{invoice.invoice_number}</td>
+                          <td className="px-4 py-3 text-slate-600">{invoice.month_key}</td>
+                          <td className="px-4 py-3 text-slate-600">{statusLabel(invoice.status, { showCashout: true })}</td>
+                          <td className="px-4 py-3 text-right font-semibold text-slate-950">{cents(invoice.grand_total_usd_cents)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="mt-4 text-sm text-slate-500">No synced invoices found yet. Sync from Invoice Generator, then map the company in Finance Mapping.</p>
+              )}
+              {Object.entries(data.billingTotals).length > 0 ? (
+                <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-sm font-semibold text-slate-950">Current configured monthly billing</p>
+                  <div className="mt-3 grid gap-3 md:grid-cols-3">
+                    {Object.entries(data.billingTotals as Record<string, number>).map(([currency, total]) => (
+                      <Field key={currency} label={currency} value={money(total, currency)} />
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+              {data.financeLineItems.length > 0 ? (
+                <div className="mt-5">
+                  <p className="text-sm font-semibold text-slate-950">Recent employee billing rows</p>
+                  <div className="mt-3 grid gap-3">
+                    {data.financeLineItems.slice(0, 5).map((item) => (
+                      <div key={item.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <p className="font-semibold text-slate-950">{item.employee_name_snapshot}</p>
+                          <p className="font-semibold text-slate-950">{cents(item.billed_total_usd_cents)}</p>
+                        </div>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {item.finance_invoices?.invoice_number ?? "Invoice"} · {item.finance_invoices?.month_key ?? "Month not set"} · {statusLabel(item.finance_invoices?.status, { showCashout: true })}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </div>
           ) : null}
 
@@ -357,7 +608,7 @@ export default async function WorktreeActionPage({
                   <div key={item.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
                     <p className="font-semibold text-slate-950">{item.status.replaceAll("_", " ")}</p>
                     <p className="mt-1 text-xs text-slate-500">
-                      Employee {item.employee_id} · Last working day {"target_last_working_day" in item ? item.target_last_working_day : item.calculated_last_working_day ?? "not set"}
+                      Employee {item.employee_id} · Last working day {employerLifecycleLastWorkingDay(item) ?? "not set"}
                     </p>
                   </div>
                 ))}
@@ -394,7 +645,8 @@ export default async function WorktreeActionPage({
     throw new Error("You cannot view this employee action.");
   }
 
-  const showFinance = action === "finances" && isAdmin;
+  const canViewEmployeeBilling = action === "finances" && (isAdmin || session.user.role === "employer_admin");
+  const canViewEmployeePay = action === "finances" && isAdmin;
   const documentSummary = data.documents.reduce(
     (acc, document) => {
       const status = document.verification_status ?? "Pending";
@@ -468,7 +720,7 @@ export default async function WorktreeActionPage({
                 <div key={document.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <p className="text-sm font-semibold text-slate-950">{document.document_type.replaceAll("_", " ")}</p>
+                      <p className="text-sm font-semibold text-slate-950">{(document.document_type ?? "document").replaceAll("_", " ")}</p>
                       {document.signed_url ? (
                         <a href={document.signed_url} target="_blank" rel="noreferrer" className="mt-1 inline-flex text-xs font-semibold text-blue-700">
                           View / Download
@@ -481,7 +733,6 @@ export default async function WorktreeActionPage({
                       {document.verification_status}
                     </span>
                   </div>
-                  {document.remarks ? <p className="mt-2 text-xs text-slate-600">{document.remarks}</p> : null}
                 </div>
               ))}
               {data.documents.length === 0 ? <p className="text-sm text-slate-500">No employee documents uploaded yet.</p> : null}
@@ -572,23 +823,98 @@ export default async function WorktreeActionPage({
 
         {action === "finances" ? (
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="text-base font-semibold text-slate-950">Finance Records</h2>
-            {showFinance ? (
-              <div className="mt-4 grid gap-3 md:grid-cols-2">
-                <Field
-                  label="Monthly Salary"
-                  value={money(data.compensation?.monthly_salary, data.compensation?.currency ?? "USD")}
-                />
-                <Field
-                  label="Employer Monthly Billing"
-                  value={money(data.billing?.monthly_bill_amount, data.billing?.currency ?? "USD")}
-                />
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-base font-semibold text-slate-950">Finance Records</h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  {isAdmin ? "Admin-only employee pay and employer billing view." : "Employer billing view for this employee."}
+                </p>
+              </div>
+              <Link href={`/dashboard/finances?employee=${data.employee.id}`} className="rounded-xl border border-blue-200 px-4 py-2 text-sm font-semibold text-blue-700">
+                Open Finance Page
+              </Link>
+            </div>
+            {canViewEmployeeBilling ? (
+              <div className="mt-4 grid gap-3 md:grid-cols-3">
+                <Field label="Synced employer billing" value={cents(sumCents(data.financeLineItems, (row) => row.billed_total_usd_cents))} />
+                <Field label="Billing months" value={new Set(data.financeLineItems.map((row) => row.finance_invoices?.month_key).filter(Boolean)).size} />
+                <Field label="Latest billing status" value={statusLabel(data.financeLineItems[0]?.finance_invoices?.status, { showCashout: isAdmin })} />
               </div>
             ) : (
               <p className="mt-2 text-sm text-slate-600">
-                Employee finance details are restricted here. Admins can view salary and billing; employers use the employer finance action for billing-only summaries.
+                Employee finance details are available from your own finance page.
               </p>
             )}
+            {canViewEmployeeBilling && data.financeLineItems.length > 0 ? (
+              <div className="mt-5 overflow-hidden rounded-xl border border-slate-200">
+                <table className="min-w-full divide-y divide-slate-200 text-sm">
+                  <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+                    <tr>
+                      <th className="px-4 py-3">Month</th>
+                      <th className="px-4 py-3">Invoice</th>
+                      <th className="px-4 py-3">Status</th>
+                      <th className="px-4 py-3 text-right">Employer billing</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 bg-white">
+                    {data.financeLineItems.map((item) => (
+                      <tr key={item.id}>
+                        <td className="px-4 py-3 text-slate-600">{item.finance_invoices?.month_key ?? "Not set"}</td>
+                        <td className="px-4 py-3 font-semibold text-slate-950">{item.finance_invoices?.invoice_number ?? "Invoice"}</td>
+                        <td className="px-4 py-3 text-slate-600">{statusLabel(item.finance_invoices?.status, { showCashout: isAdmin })}</td>
+                        <td className="px-4 py-3 text-right font-semibold text-slate-950">{cents(item.billed_total_usd_cents)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : canViewEmployeeBilling ? (
+              <p className="mt-4 text-sm text-slate-500">No synced month-wise billing rows found for this employee yet.</p>
+            ) : null}
+            {canViewEmployeePay ? (
+              <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-sm font-semibold text-slate-950">Admin employee pay summary</p>
+                <div className="mt-3 grid gap-3 md:grid-cols-3">
+                  <Field label="Dollar inward" value={cents(sumCents(data.statementRows, (row) => row.dollar_inward_usd_cents))} />
+                  <Field label="Effective inward" value={cents(sumCents(data.statementSummaries, (row) => row.effective_dollar_inward_usd_cents))} />
+                  <Field label="Actual paid INR" value={cents(sumCents(data.salaryPayments, (row) => row.actual_paid_inr_cents), "INR")} />
+                  <Field label="PF INR" value={cents(sumCents(data.salaryPayments, (row) => row.pf_inr_cents), "INR")} />
+                  <Field label="TDS INR" value={cents(sumCents(data.salaryPayments, (row) => row.tds_inr_cents), "INR")} />
+                  <Field
+                    label="Current monthly salary"
+                    value={money(data.compensation?.monthly_salary, data.compensation?.currency ?? "USD")}
+                  />
+                </div>
+                {data.salaryPayments.length > 0 || data.statementRows.length > 0 ? (
+                  <div className="mt-5 grid gap-3 md:grid-cols-2">
+                    <div className="rounded-xl border border-slate-200 bg-white p-4">
+                      <p className="text-sm font-semibold text-slate-950">Dollar inward rows</p>
+                      <div className="mt-3 grid gap-2">
+                        {data.statementRows.slice(0, 6).map((row) => (
+                          <div key={row.id} className="flex items-center justify-between gap-3 text-sm">
+                            <span className="text-slate-600">{row.month_key} · {row.finance_invoices?.invoice_number ?? "Invoice"}</span>
+                            <span className="font-semibold text-slate-950">{cents(row.dollar_inward_usd_cents)}</span>
+                          </div>
+                        ))}
+                        {data.statementRows.length === 0 ? <p className="text-sm text-slate-500">No statement rows synced yet.</p> : null}
+                      </div>
+                    </div>
+                    <div className="rounded-xl border border-slate-200 bg-white p-4">
+                      <p className="text-sm font-semibold text-slate-950">INR salary payments</p>
+                      <div className="mt-3 grid gap-2">
+                        {data.salaryPayments.slice(0, 6).map((row) => (
+                          <div key={row.id} className="flex items-center justify-between gap-3 text-sm">
+                            <span className="text-slate-600">{row.month_key} · {row.paid_status ? "Paid" : "Pending"}</span>
+                            <span className="font-semibold text-slate-950">{cents(row.actual_paid_inr_cents, "INR")}</span>
+                          </div>
+                        ))}
+                        {data.salaryPayments.length === 0 ? <p className="text-sm text-slate-500">No salary payments synced yet.</p> : null}
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         ) : null}
       </section>

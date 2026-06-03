@@ -15,7 +15,7 @@ describe("finance sync payload", () => {
         invoiceNumber: "INV-001",
         month: 5,
         year: 2026,
-        status: "generated",
+        status: "received",
       },
       lineItems: [{
         id: "line_1",
@@ -24,11 +24,35 @@ describe("finance sync payload", () => {
         employeeNameSnapshot: "John Employee",
         billedTotalUsdCents: 500000,
       }],
+      salaryPayments: [{
+        id: "salary_1",
+        employeeId: "employee_1",
+        companyId: "company_acme",
+        month: "2026-05",
+        salaryUsdCents: 250000,
+        salaryPaidInrCents: 20800000,
+        pfInrCents: 180000,
+        tdsInrCents: 500000,
+        actualPaidInrCents: 20120000,
+        paidStatus: true,
+      }],
+      statementRows: [{
+        id: "statement_row_1",
+        employeeId: "employee_1",
+        invoiceId: "invoice_1",
+        monthKey: "2026-05",
+        employeeNameSnapshot: "John Employee",
+        invoiceNumberSnapshot: "INV-001",
+        dollarInwardUsdCents: 300000,
+      }],
     });
 
     expect(parsed.source).toBe("invoice_generator");
     expect(parsed.invoice.month).toBe(5);
+    expect(parsed.invoice.status).toBe("received");
     expect(parsed.lineItems[0].payoutMonthlyUsdCentsSnapshot).toBe(0);
+    expect(parsed.salaryPayments[0].actualPaidInrCents).toBe(20120000);
+    expect(parsed.statementRows[0].dollarInwardUsdCents).toBe(300000);
   });
 
   test("rejects unknown source keys", () => {
