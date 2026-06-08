@@ -18,6 +18,22 @@ export const metadata: Metadata = {
   description: "Employer onboarding, workforce records, and employee access.",
 };
 
+const themeInitScript = `
+(() => {
+  try {
+    const stored = window.localStorage.getItem("eor-theme");
+    const theme = stored === "light" || stored === "dark" || stored === "system" ? stored : "system";
+    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    const shouldDark = theme === "dark" || (theme === "system" && prefersDark);
+    document.documentElement.classList.toggle("dark", shouldDark);
+    document.documentElement.style.colorScheme = shouldDark ? "dark" : "light";
+  } catch {
+    document.documentElement.classList.remove("dark");
+    document.documentElement.style.colorScheme = "light";
+  }
+})();
+`;
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -49,7 +65,11 @@ export default function RootLayout({
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+      </head>
       <body className="min-h-full flex flex-col">
         <ClerkProvider dynamic appearance={clerkAppearance}>
           {children}

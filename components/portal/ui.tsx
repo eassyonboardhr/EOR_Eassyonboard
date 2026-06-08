@@ -43,7 +43,7 @@ function navSections(session: PortalSession, unreadNotices = 0, unreadMessages =
   if (session.user.role === "employer_admin") {
     return [
       { label: "Dashboard", icon: "D", href: dashboardHref(session) },
-      { label: "Employees", icon: "EE", href: `${dashboardHref(session)}#employees` },
+      { label: "Employees", icon: "EE", href: "/dashboard/employees" },
       { label: "Teams", icon: "TM", href: "/dashboard/employer/teams" },
       { label: "Worktree", icon: "WT", href: "/dashboard/worktree" },
       { label: "Leaves", icon: "L", href: "/dashboard/employer/leaves" },
@@ -62,8 +62,8 @@ function navSections(session: PortalSession, unreadNotices = 0, unreadMessages =
 
   return [
     { label: "Dashboard", icon: "D", href: dashboardHref(session) },
-    { label: "Companies", icon: "C", href: `${dashboardHref(session)}#employers` },
-    { label: "Employees", icon: "EE", href: `${dashboardHref(session)}#employees` },
+    { label: "Employers", icon: "ER", href: "/dashboard/employers" },
+    { label: "Employees", icon: "EE", href: "/dashboard/employees" },
     { label: "Worktree", icon: "WT", href: "/dashboard/worktree" },
     { label: "Leaves", icon: "L", href: "/dashboard/admin/leaves" },
     { label: "Documents", icon: "DOC", href: "/dashboard/documents" },
@@ -122,7 +122,7 @@ export async function PortalShell({
         <nav className="flex-1 space-y-1 px-3 py-5">
           {navigation.map((item) => {
             const isDashboard = item.label === "Dashboard";
-            const activeSectionTitles = ["worktree", "leaves", "notices", "messages", "onboarding", "resignations", "offboarding", "team"];
+            const activeSectionTitles = ["worktree", "leaves", "notices", "messages", "onboarding", "resignations", "offboarding", "team", "employers", "employees"];
             const isActive =
               (isDashboard && !activeSectionTitles.some((section) => activeTitle.includes(section))) ||
               activeTitle.includes(item.label.toLowerCase()) ||

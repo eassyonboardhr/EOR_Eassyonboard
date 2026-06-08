@@ -10,13 +10,34 @@ type SearchItem = {
   type: string;
 };
 
+type ThemePreference = "system" | "light" | "dark";
+
+function isThemePreference(value: string | null | undefined): value is ThemePreference {
+  return value === "system" || value === "light" || value === "dark";
+}
+
+function getSavedTheme(initialTheme?: string | null): ThemePreference {
+  const saved = window.localStorage.getItem("eor-theme");
+  if (isThemePreference(saved)) return saved;
+  if (isThemePreference(initialTheme)) return initialTheme;
+  return "system";
+}
+
+function getEffectiveTheme(theme: ThemePreference): "light" | "dark" {
+  if (theme === "system") {
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  }
+  return theme;
+}
+
 export function ShellControls({ items, initialTheme }: { items: SearchItem[]; initialTheme?: string | null }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [theme, setTheme] = useState("system");
+  const [theme, setTheme] = useState<ThemePreference>("system");
+  const [effectiveTheme, setEffectiveTheme] = useState<"light" | "dark">("light");
 
   useEffect(() => {
-    const saved = window.localStorage.getItem("eor-theme") ?? initialTheme ?? "system";
+    const saved = getSavedTheme(initialTheme);
     applyTheme(saved);
     window.dispatchEvent(new CustomEvent("eor-theme-ready", { detail: saved }));
   }, [initialTheme]);
@@ -24,11 +45,22 @@ export function ShellControls({ items, initialTheme }: { items: SearchItem[]; in
   useEffect(() => {
     const handler = (event: Event) => {
       const custom = event as CustomEvent<string>;
-      setTheme(custom.detail ?? "system");
+      const nextTheme = isThemePreference(custom.detail) ? custom.detail : "system";
+      setTheme(nextTheme);
+      setEffectiveTheme(getEffectiveTheme(nextTheme));
     };
     window.addEventListener("eor-theme-ready", handler);
     return () => window.removeEventListener("eor-theme-ready", handler);
   }, []);
+
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const handler = () => {
+      if (theme === "system") applyTheme("system");
+    };
+    media.addEventListener("change", handler);
+    return () => media.removeEventListener("change", handler);
+  }, [theme]);
 
   const results = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -38,11 +70,14 @@ export function ShellControls({ items, initialTheme }: { items: SearchItem[]; in
       .slice(0, 16);
   }, [items, query]);
 
-  function applyTheme(nextTheme: string) {
-    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    const shouldDark = nextTheme === "dark" || (nextTheme === "system" && prefersDark);
+  function applyTheme(nextTheme: ThemePreference) {
+    const nextEffectiveTheme = getEffectiveTheme(nextTheme);
+    const shouldDark = nextEffectiveTheme === "dark";
     document.documentElement.classList.toggle("dark", shouldDark);
+    document.documentElement.style.colorScheme = nextEffectiveTheme;
     window.localStorage.setItem("eor-theme", nextTheme);
+    setTheme(nextTheme);
+    setEffectiveTheme(nextEffectiveTheme);
   }
 
   return (
@@ -58,16 +93,15 @@ export function ShellControls({ items, initialTheme }: { items: SearchItem[]; in
       <button
         type="button"
         onClick={() => {
-          const next = theme === "dark" ? "light" : "dark";
-          setTheme(next);
+          const next = effectiveTheme === "dark" ? "light" : "dark";
           applyTheme(next);
         }}
         className="flex h-9 items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
         aria-label="Toggle theme"
-        title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+        title={effectiveTheme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
       >
         <span className="h-2 w-2 rounded-full bg-blue-600 dark:bg-amber-300" />
-        {theme === "dark" ? "Light" : "Dark"}
+        {effectiveTheme === "dark" ? "Light" : "Dark"}
       </button>
 
       {open ? (
