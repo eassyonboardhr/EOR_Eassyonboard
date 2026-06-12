@@ -8,7 +8,7 @@ import {
 } from "@/lib/portal/actions/team-management";
 import { getTeamManagementData } from "@/lib/portal/team-management";
 import { requirePortalRole } from "@/lib/portal/session";
-import { PortalShell } from "@/components/portal/ui";
+import { PortalShell, SubmitButton } from "@/components/portal/ui";
 
 type Row = {
   id: string;
@@ -77,7 +77,7 @@ export default async function EmployerTeamsPage() {
               <SelectEmployee name="manager_employee_id" employees={employees} />
             </label>
             <div className="pt-6">
-              <button className="h-10 rounded-xl bg-blue-700 px-4 text-sm font-semibold text-white">Create</button>
+              <SubmitButton pendingText="Creating...">Create</SubmitButton>
             </div>
           </form>
         </section>
@@ -115,9 +115,7 @@ export default async function EmployerTeamsPage() {
                         Confirm
                       </label>
                     ) : null}
-                    <button className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700">
-                      Delete
-                    </button>
+                    <SubmitButton tone="danger" pendingText="Deleting...">Delete</SubmitButton>
                   </form>
                 </div>
 
@@ -127,7 +125,7 @@ export default async function EmployerTeamsPage() {
                     <input type="hidden" name="team_id" value={team.id} />
                     <input name="name" defaultValue={team.name ?? ""} required className="h-10 rounded-xl border border-slate-300 px-3 text-sm" />
                     <SelectEmployee name="manager_employee_id" employees={employees} defaultValue={team.manager_employee_id} />
-                    <button className="h-10 rounded-xl bg-slate-900 px-4 text-sm font-semibold text-white">Save</button>
+                    <SubmitButton pendingText="Saving...">Save</SubmitButton>
                   </form>
                 </details>
 
@@ -152,7 +150,7 @@ export default async function EmployerTeamsPage() {
                           <form action={removeTeamMemberAction}>
                             <input type="hidden" name="team_id" value={team.id} />
                             <input type="hidden" name="employee_id" value={String(member.employee_id)} />
-                            <button className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-bold text-slate-600">Remove</button>
+                            <SubmitButton tone="secondary" pendingText="Removing...">Remove</SubmitButton>
                           </form>
                         </div>
                       );
@@ -165,7 +163,7 @@ export default async function EmployerTeamsPage() {
                   <input type="hidden" name="team_id" value={team.id} />
                   <SelectEmployee name="employee_id" employees={employees} includeEmpty />
                   <input name="role_in_team" placeholder="Role in team" className="h-10 rounded-xl border border-slate-300 px-3 text-sm" />
-                  <button className="h-10 rounded-xl bg-blue-700 px-4 text-sm font-semibold text-white">Add / Move</button>
+                  <SubmitButton pendingText="Adding...">Add / Move</SubmitButton>
                 </form>
               </div>
             );

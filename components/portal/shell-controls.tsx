@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 type SearchItem = {
   label: string;
@@ -30,37 +30,55 @@ function getEffectiveTheme(theme: ThemePreference): "light" | "dark" {
   return theme;
 }
 
+function readDomTheme(): "light" | "dark" {
+  return document.documentElement.classList.contains("dark") ? "dark" : "light";
+}
+
+function applyThemeDom(nextTheme: ThemePreference) {
+  const nextEffectiveTheme = getEffectiveTheme(nextTheme);
+  document.documentElement.classList.toggle("dark", nextEffectiveTheme === "dark");
+  document.documentElement.style.colorScheme = nextEffectiveTheme;
+  window.localStorage.setItem("eor-theme", nextTheme);
+}
+
 export function ShellControls({ items, initialTheme }: { items: SearchItem[]; initialTheme?: string | null }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [theme, setTheme] = useState<ThemePreference>("system");
   const [effectiveTheme, setEffectiveTheme] = useState<"light" | "dark">("light");
+
+  const syncEffectiveTheme = useCallback(() => {
+    setEffectiveTheme(readDomTheme());
+  }, []);
+
+  const applyTheme = useCallback((nextTheme: ThemePreference) => {
+    applyThemeDom(nextTheme);
+    syncEffectiveTheme();
+  }, [syncEffectiveTheme]);
 
   useEffect(() => {
     const saved = getSavedTheme(initialTheme);
-    applyTheme(saved);
-    window.dispatchEvent(new CustomEvent("eor-theme-ready", { detail: saved }));
-  }, [initialTheme]);
+    applyThemeDom(saved);
+    window.setTimeout(syncEffectiveTheme, 0);
+  }, [initialTheme, syncEffectiveTheme]);
 
   useEffect(() => {
-    const handler = (event: Event) => {
-      const custom = event as CustomEvent<string>;
-      const nextTheme = isThemePreference(custom.detail) ? custom.detail : "system";
-      setTheme(nextTheme);
-      setEffectiveTheme(getEffectiveTheme(nextTheme));
+    const handler = (event: StorageEvent) => {
+      if (event.key !== "eor-theme") return;
+      const nextTheme = isThemePreference(event.newValue) ? event.newValue : "system";
+      applyTheme(nextTheme);
     };
-    window.addEventListener("eor-theme-ready", handler);
-    return () => window.removeEventListener("eor-theme-ready", handler);
-  }, []);
+    window.addEventListener("storage", handler);
+    return () => window.removeEventListener("storage", handler);
+  }, [applyTheme]);
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     const handler = () => {
-      if (theme === "system") applyTheme("system");
+      if (window.localStorage.getItem("eor-theme") === "system") applyTheme("system");
     };
     media.addEventListener("change", handler);
     return () => media.removeEventListener("change", handler);
-  }, [theme]);
+  }, [applyTheme]);
 
   const results = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -70,14 +88,9 @@ export function ShellControls({ items, initialTheme }: { items: SearchItem[]; in
       .slice(0, 16);
   }, [items, query]);
 
-  function applyTheme(nextTheme: ThemePreference) {
-    const nextEffectiveTheme = getEffectiveTheme(nextTheme);
-    const shouldDark = nextEffectiveTheme === "dark";
-    document.documentElement.classList.toggle("dark", shouldDark);
-    document.documentElement.style.colorScheme = nextEffectiveTheme;
-    window.localStorage.setItem("eor-theme", nextTheme);
-    setTheme(nextTheme);
-    setEffectiveTheme(nextEffectiveTheme);
+  function toggleTheme() {
+    const nextTheme = readDomTheme() === "dark" ? "light" : "dark";
+    applyTheme(nextTheme);
   }
 
   return (
@@ -92,16 +105,13 @@ export function ShellControls({ items, initialTheme }: { items: SearchItem[]; in
       </button>
       <button
         type="button"
-        onClick={() => {
-          const next = effectiveTheme === "dark" ? "light" : "dark";
-          applyTheme(next);
-        }}
+        onClick={toggleTheme}
         className="flex h-9 items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
         aria-label="Toggle theme"
         title={effectiveTheme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
       >
-        <span className="h-2 w-2 rounded-full bg-blue-600 dark:bg-amber-300" />
-        {effectiveTheme === "dark" ? "Light" : "Dark"}
+        <span className={`h-2 w-2 rounded-full ${effectiveTheme === "dark" ? "bg-amber-300" : "bg-blue-600"}`} />
+        {effectiveTheme === "dark" ? "Light mode" : "Dark mode"}
       </button>
 
       {open ? (

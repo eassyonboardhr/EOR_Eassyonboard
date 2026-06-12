@@ -3,6 +3,8 @@ import { UserButton } from "@clerk/nextjs";
 import { getUnreadNoticeCount } from "@/lib/portal/notices";
 import { getUnreadMessageCount } from "@/lib/portal/messages";
 import { getCommandPaletteItems, getSettingsData } from "@/lib/portal/profile";
+import { PendingSubmitButton } from "@/components/portal/pending-submit-button";
+import { RouteProgress } from "@/components/portal/route-progress";
 import { ShellControls } from "@/components/portal/shell-controls";
 import type { PortalCounts, PortalSession } from "@/lib/portal/types";
 
@@ -109,6 +111,7 @@ export async function PortalShell({
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-950 dark:bg-slate-950 dark:text-slate-100 lg:grid lg:grid-cols-[236px_1fr]">
+      <RouteProgress />
       <aside id="portal-sidebar" className="hidden min-h-screen border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 lg:flex lg:flex-col">
         <div className="flex h-16 items-center gap-3 border-b border-slate-100 px-5">
           <Link href="/" className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-700 text-sm font-bold text-white">
@@ -302,7 +305,7 @@ export function TextInput({
   defaultValue?: string | number | null;
 }) {
   return (
-    <label className="grid gap-1 text-sm font-medium text-slate-700">
+    <label className="grid gap-1 text-sm font-medium text-slate-700 dark:text-slate-200">
       {label}
       <input
         name={name}
@@ -327,7 +330,7 @@ export function TextArea({
   defaultValue?: string | null;
 }) {
   return (
-    <label className="grid gap-1 text-sm font-medium text-slate-700">
+    <label className="grid gap-1 text-sm font-medium text-slate-700 dark:text-slate-200">
       {label}
       <textarea
         name={name}
@@ -340,7 +343,19 @@ export function TextArea({
   );
 }
 
-export function SubmitButton({ children, tone = "primary" }: { children: React.ReactNode; tone?: "primary" | "secondary" | "danger" }) {
+export function SubmitButton({
+  children,
+  tone = "primary",
+  pendingText,
+  name,
+  value,
+}: {
+  children: React.ReactNode;
+  tone?: "primary" | "secondary" | "danger";
+  pendingText?: React.ReactNode;
+  name?: string;
+  value?: string;
+}) {
   const className =
     tone === "primary"
       ? "bg-blue-700 text-white hover:bg-blue-800"
@@ -349,12 +364,14 @@ export function SubmitButton({ children, tone = "primary" }: { children: React.R
         : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-800";
 
   return (
-    <button
-      type="submit"
-      className={`inline-flex h-10 items-center justify-center rounded-xl px-4 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-blue-500 ${className}`}
+    <PendingSubmitButton
+      className={`inline-flex h-10 items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-blue-500 ${className}`}
+      pendingText={pendingText}
+      name={name}
+      value={value}
     >
       {children}
-    </button>
+    </PendingSubmitButton>
   );
 }
 

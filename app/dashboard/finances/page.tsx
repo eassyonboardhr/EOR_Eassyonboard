@@ -2,7 +2,7 @@
 import { getFinancesData } from "@/lib/portal/finances";
 import { markFinanceInvoicePaymentReceivedAction } from "@/lib/portal/actions/finance";
 import { isPlatformAdmin, requirePortalRole } from "@/lib/portal/session";
-import { EmptyState, Panel, PortalShell, formatDate } from "@/components/portal/ui";
+import { EmptyState, Panel, PortalShell, SubmitButton, formatDate } from "@/components/portal/ui";
 import Link from "next/link";
 
 function money(value: number | string | null | undefined, currency = "USD") {
@@ -206,9 +206,7 @@ export default async function FinancesPage({
                                 placeholder="Notes"
                                 className="h-9 w-32 rounded-lg border border-slate-200 px-2 text-xs dark:border-slate-700 dark:bg-slate-950"
                               />
-                              <button className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700">
-                                Mark received
-                              </button>
+                              <SubmitButton pendingText="Updating...">Mark received</SubmitButton>
                             </form>
                           ) : (
                             <span className="text-xs text-slate-500">{formatInvoiceStatus(invoice.status, admin)}</span>

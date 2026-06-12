@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { PendingSubmitButton } from "@/components/portal/pending-submit-button";
 import { submitLeaveRequestAction } from "@/lib/portal/actions/leave";
 import { calculateLeaveDays, eachDateInRange } from "@/lib/portal/leave-utils";
 import type { LeaveLifecycleMarkers, LeaveSummary } from "@/lib/portal/leaves";
@@ -129,11 +130,11 @@ function Legend() {
   ];
 
   return (
-    <div className="flex flex-wrap gap-4 text-xs text-slate-600">
+    <div className="flex flex-wrap gap-4 text-xs text-slate-600 dark:text-slate-300">
       {items.map(([label, color]) => (
         <span key={label} className="flex items-center gap-2">
           {label === "Taken (X)" ? (
-            <span className="font-bold text-slate-900">X</span>
+            <span className="font-bold text-slate-900 dark:text-slate-100">X</span>
           ) : (
             <span className={`h-2.5 w-2.5 rounded-full ${color}`} />
           )}
@@ -157,12 +158,12 @@ function LeaveDetailsModal({
   const request = day?.leave_requests;
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/30 p-4">
-      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/40 p-4">
+      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-800 dark:bg-slate-900">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-base font-semibold text-slate-950">Leave Details</p>
-            <p className="mt-1 text-sm text-slate-500">
+            <p className="text-base font-semibold text-slate-950 dark:text-slate-100">Leave Details</p>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
               {formatDate(request?.start_date ?? absence?.start_date)} -{" "}
               {formatDate(request?.end_date ?? absence?.end_date)}
             </p>
@@ -170,25 +171,25 @@ function LeaveDetailsModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+            className="rounded-full p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-100"
           >
             X
           </button>
         </div>
         <div className="mt-5 grid gap-3 text-sm">
           <div className="flex justify-between">
-            <span className="text-slate-500">Status</span>
-            <span className="font-semibold capitalize text-slate-950">
+            <span className="text-slate-500 dark:text-slate-400">Status</span>
+            <span className="font-semibold capitalize text-slate-950 dark:text-slate-100">
               {day?.status ?? absence?.status ?? "recorded"}
               {day?.is_lop || absence?.is_lop ? " + LOP" : ""}
             </span>
           </div>
           <div className="flex justify-between">
-            <span className="text-slate-500">Leave days</span>
+            <span className="text-slate-500 dark:text-slate-400">Leave days</span>
             <span className="font-semibold">{request?.total_leave_days ?? absence?.total_absent_days ?? 0}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-slate-500">Excluded holidays</span>
+            <span className="text-slate-500 dark:text-slate-400">Excluded holidays</span>
             <span className="font-semibold">{request?.excluded_holiday_days ?? 0}</span>
           </div>
           {request?.lop_days ? (
@@ -198,13 +199,13 @@ function LeaveDetailsModal({
             </div>
           ) : null}
           <div>
-            <p className="text-slate-500">Reason</p>
-            <p className="mt-1 font-medium text-slate-950">{request?.reason ?? absence?.reason ?? "Not provided"}</p>
+            <p className="text-slate-500 dark:text-slate-400">Reason</p>
+            <p className="mt-1 font-medium text-slate-950 dark:text-slate-100">{request?.reason ?? absence?.reason ?? "Not provided"}</p>
           </div>
           {request?.mobile_number ? (
             <div>
-              <p className="text-slate-500">Mobile number</p>
-              <p className="mt-1 font-medium text-slate-950">{request.mobile_number}</p>
+              <p className="text-slate-500 dark:text-slate-400">Mobile number</p>
+              <p className="mt-1 font-medium text-slate-950 dark:text-slate-100">{request.mobile_number}</p>
             </div>
           ) : null}
           {request?.rejection_reason ? (
@@ -230,8 +231,8 @@ export function LeaveSummaryCard({ summary }: { summary: LeaveSummary }) {
   ];
 
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <h2 className="text-base font-semibold text-slate-950">Leave Summary</h2>
+    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <h2 className="text-base font-semibold text-slate-950 dark:text-slate-100">Leave Summary</h2>
       <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {items.map(([label, value, tone]) => (
           <div key={label} className={`rounded-xl p-4 ${tone}`}>
@@ -333,12 +334,12 @@ export function LeaveCalendar({
 
   return (
     <div className="grid gap-5">
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <div className="flex items-center justify-between gap-4">
-          <button type="button" className="rounded-lg px-3 py-2 text-slate-500 hover:bg-slate-50" onClick={() => moveMonth(-1)}>
+          <button type="button" className="rounded-lg px-3 py-2 text-slate-500 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800" onClick={() => moveMonth(-1)}>
             ‹
           </button>
-          <h2 className="text-base font-semibold text-slate-950">
+          <h2 className="text-base font-semibold text-slate-950 dark:text-slate-100">
             {new Intl.DateTimeFormat("en-IN", { month: "long", year: "numeric", timeZone: "UTC" }).format(
               new Date(Date.UTC(viewYear, viewMonth - 1, 1)),
             )}
@@ -355,7 +356,7 @@ export function LeaveCalendar({
             >
               Today
             </button>
-            <button type="button" className="rounded-lg px-3 py-2 text-slate-500 hover:bg-slate-50" onClick={() => moveMonth(1)}>
+            <button type="button" className="rounded-lg px-3 py-2 text-slate-500 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800" onClick={() => moveMonth(1)}>
               ›
             </button>
           </div>
@@ -367,7 +368,7 @@ export function LeaveCalendar({
             </div>
           ))}
         </div>
-        <div className="grid grid-cols-7 overflow-hidden rounded-xl border border-slate-100">
+        <div className="grid grid-cols-7 overflow-hidden rounded-xl border border-slate-100 dark:border-slate-800">
           {monthMatrix(viewYear, viewMonth).map((cell) => {
             const day = leaveDayByDate.get(cell.iso);
             const holiday =
@@ -409,12 +410,12 @@ export function LeaveCalendar({
       </section>
 
       {mode === "apply" ? (
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="text-base font-semibold text-slate-950">Selected Leave Details</h2>
-          <div className="mt-4 grid gap-3 rounded-xl border border-slate-200 p-4 text-sm sm:grid-cols-2">
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <h2 className="text-base font-semibold text-slate-950 dark:text-slate-100">Selected Leave Details</h2>
+          <div className="mt-4 grid gap-3 rounded-xl border border-slate-200 p-4 text-sm sm:grid-cols-2 dark:border-slate-800">
             <div>
-              <p className="text-xs text-slate-500">Selected Dates</p>
-              <p className="font-semibold text-slate-950">
+              <p className="text-xs text-slate-500 dark:text-slate-400">Selected Dates</p>
+              <p className="font-semibold text-slate-950 dark:text-slate-100">
                 {rangeStart && rangeEnd ? `${formatDate(rangeStart)} - ${formatDate(rangeEnd)}` : "Select a date range"}
               </p>
             </div>
@@ -434,9 +435,9 @@ export function LeaveCalendar({
           <form action={submitLeaveRequestAction} className="mt-4 grid gap-4">
             <input type="hidden" name="start_date" value={rangeStart} />
             <input type="hidden" name="end_date" value={rangeEnd || rangeStart} />
-            <label className="grid gap-1 text-sm font-medium text-slate-700">
+            <label className="grid gap-1 text-sm font-medium text-slate-700 dark:text-slate-200">
               Leave type
-              <select name="leave_type" className="h-10 rounded-xl border border-slate-300 px-3">
+              <select name="leave_type" className="h-10 rounded-xl border border-slate-300 bg-white px-3 dark:border-slate-700 dark:bg-slate-950">
                 <option value="casual">Casual</option>
                 <option value="sick">Sick</option>
                 <option value="earned">Earned</option>
@@ -446,22 +447,22 @@ export function LeaveCalendar({
               </select>
             </label>
             <div className="grid gap-4 sm:grid-cols-2">
-              <label className="grid gap-1 text-sm font-medium text-slate-700">
+              <label className="grid gap-1 text-sm font-medium text-slate-700 dark:text-slate-200">
                 Reason
-                <input name="reason" required className="h-10 rounded-xl border border-slate-300 px-3" />
+                <input name="reason" required className="h-10 rounded-xl border border-slate-300 bg-white px-3 dark:border-slate-700 dark:bg-slate-950" />
               </label>
-              <label className="grid gap-1 text-sm font-medium text-slate-700">
+              <label className="grid gap-1 text-sm font-medium text-slate-700 dark:text-slate-200">
                 Mobile Number
-                <input name="mobile_number" required className="h-10 rounded-xl border border-slate-300 px-3" />
+                <input name="mobile_number" required className="h-10 rounded-xl border border-slate-300 bg-white px-3 dark:border-slate-700 dark:bg-slate-950" />
               </label>
             </div>
-            <button
-              type="submit"
+            <PendingSubmitButton
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-700 px-4 text-sm font-semibold text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+              pendingText="Submitting..."
               disabled={!rangeStart || !rangeEnd || !calculation || calculation.totalLeaveDays <= 0}
-              className="h-11 rounded-xl bg-emerald-700 px-4 text-sm font-semibold text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-slate-300"
             >
               Submit Leave Request
-            </button>
+            </PendingSubmitButton>
           </form>
         </section>
       ) : null}
@@ -473,8 +474,8 @@ export function LeaveCalendar({
 
 export function RecentLeaveRequests({ requests }: { requests: Array<Record<string, unknown>> }) {
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <h2 className="text-base font-semibold text-slate-950">Recent Leave Requests</h2>
+    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <h2 className="text-base font-semibold text-slate-950 dark:text-slate-100">Recent Leave Requests</h2>
       <div className="mt-4 overflow-x-auto">
         <table className="w-full min-w-[640px] text-left text-sm">
           <thead className="text-xs text-slate-500">

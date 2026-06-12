@@ -24,9 +24,14 @@ export default async function MessagesPage({
         <div className="grid gap-5">
           <Panel title="Compose">
             <form action={createMessageThreadAction} className="grid gap-4">
-              <label className="grid gap-1 text-sm font-medium text-slate-700">
+              <label className="grid gap-1 text-sm font-medium text-slate-700 dark:text-slate-200">
                 Recipient
-                <select name="recipient" required defaultValue={recipientParam ?? ""} className="h-10 rounded-xl border border-slate-300 bg-white px-3">
+                <select
+                  name="recipient"
+                  required
+                  defaultValue={recipientParam ?? ""}
+                  className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-950 outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                >
                   <option value="">Choose recipient</option>
                   {data.recipients.map((recipient) => (
                     <option key={recipient.value} value={recipient.value}>
@@ -37,7 +42,7 @@ export default async function MessagesPage({
               </label>
               <TextInput name="subject" label="Subject" required />
               <TextArea name="body" label="Message" required />
-              <SubmitButton>Send Message</SubmitButton>
+              <SubmitButton pendingText="Sending...">Send Message</SubmitButton>
             </form>
           </Panel>
 
@@ -50,11 +55,11 @@ export default async function MessagesPage({
                   name="q"
                   defaultValue={query ?? ""}
                   placeholder="Subject or message text"
-                  className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-950"
+                  className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-950 outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
                 />
               </label>
               <div className="flex flex-wrap gap-2">
-                <button className="rounded-xl bg-blue-700 px-3 py-2 text-xs font-semibold text-white">Search</button>
+                <SubmitButton pendingText="Searching...">Search</SubmitButton>
                 <Link href={archived ? "/dashboard/messages" : "/dashboard/messages?archived=1"} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 dark:border-slate-700 dark:text-slate-200">
                   {archived ? "Open inbox" : "View archived"}
                 </Link>
@@ -66,14 +71,16 @@ export default async function MessagesPage({
                   key={thread.id}
                   href={`/dashboard/messages?thread=${thread.id}${archived ? "&archived=1" : ""}${query ? `&q=${encodeURIComponent(query)}` : ""}`}
                   className={`rounded-xl border p-3 text-sm transition hover:border-blue-200 hover:bg-blue-50 ${
-                    thread.unread ? "border-blue-200 bg-blue-50" : "border-slate-200 bg-white"
+                    thread.unread
+                      ? "border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/40"
+                      : "border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950"
                   }`}
                 >
                   <div className="flex justify-between gap-3">
-                    <p className="font-semibold text-slate-950">{thread.subject}</p>
+                    <p className="font-semibold text-slate-950 dark:text-slate-100">{thread.subject}</p>
                     {thread.unread ? <span className="rounded-full bg-blue-700 px-2 py-0.5 text-xs font-semibold text-white">New</span> : null}
                   </div>
-                  <p className="mt-1 text-xs text-slate-500">{formatDate(thread.latestEntryAt)}</p>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{formatDate(thread.latestEntryAt)}</p>
                 </Link>
               ))}
               {data.threads.length === 0 ? <EmptyState>{archived ? "No archived message threads found." : "No message threads found."}</EmptyState> : null}
@@ -86,7 +93,7 @@ export default async function MessagesPage({
             <div className="grid gap-4">
               <div className="flex flex-wrap gap-2">
                 {data.participants.map((participant: any) => (
-                  <span key={participant.id} className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                  <span key={participant.id} className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                     {participant.portal_users?.full_name ?? participant.portal_users?.email ?? participant.role_snapshot}
                   </span>
                 ))}
@@ -94,26 +101,35 @@ export default async function MessagesPage({
               <div className="flex flex-wrap gap-2">
                 <form action={updateMessageThreadStateAction}>
                   <input type="hidden" name="thread_id" value={data.selectedThread.id} />
-                  <button name="state_action" value="read" className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 dark:border-slate-700 dark:text-slate-200">Mark read</button>
+                  <SubmitButton tone="secondary" name="state_action" value="read" pendingText="Marking...">Mark read</SubmitButton>
                 </form>
                 <form action={updateMessageThreadStateAction}>
                   <input type="hidden" name="thread_id" value={data.selectedThread.id} />
-                  <button name="state_action" value="unread" className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 dark:border-slate-700 dark:text-slate-200">Mark unread</button>
+                  <SubmitButton tone="secondary" name="state_action" value="unread" pendingText="Marking...">Mark unread</SubmitButton>
                 </form>
                 <form action={updateMessageThreadStateAction}>
                   <input type="hidden" name="thread_id" value={data.selectedThread.id} />
-                  <button name="state_action" value={archived ? "restore" : "archive"} className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+                  <SubmitButton tone="secondary" name="state_action" value={archived ? "restore" : "archive"} pendingText={archived ? "Restoring..." : "Archiving..."}>
                     {archived ? "Restore thread" : "Archive thread"}
-                  </button>
+                  </SubmitButton>
                 </form>
               </div>
               <div className="grid max-h-[560px] gap-3 overflow-y-auto pr-2">
                 {data.entries.map((entry: any) => {
                   const mine = entry.sender_id === session.user.id;
                   return (
-                    <div key={entry.id} className={`rounded-2xl border p-4 ${mine ? "ml-auto max-w-[82%] border-blue-100 bg-blue-50" : "max-w-[82%] border-slate-200 bg-white"}`}>
-                      <p className="text-xs font-semibold text-slate-500">{entry.portal_users?.full_name ?? entry.portal_users?.email ?? "Sender"} · {formatDate(entry.created_at)}</p>
-                      <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">{entry.body}</p>
+                    <div
+                      key={entry.id}
+                      className={`rounded-2xl border p-4 ${
+                        mine
+                          ? "ml-auto max-w-[82%] border-blue-100 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/60"
+                          : "max-w-[82%] border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950"
+                      }`}
+                    >
+                      <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                        {entry.portal_users?.full_name ?? entry.portal_users?.email ?? "Sender"} · {formatDate(entry.created_at)}
+                      </p>
+                      <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700 dark:text-slate-200">{entry.body}</p>
                     </div>
                   );
                 })}
@@ -121,7 +137,7 @@ export default async function MessagesPage({
               <form action={replyMessageThreadAction} className="grid gap-3">
                 <input type="hidden" name="thread_id" value={data.selectedThread.id} />
                 <TextArea name="body" label="Reply" required />
-                <SubmitButton>Send Reply</SubmitButton>
+                <SubmitButton pendingText="Sending...">Send Reply</SubmitButton>
               </form>
             </div>
           ) : (

@@ -4,6 +4,7 @@ import {
   markAbsentAction,
   reviewLeaveRequestAction,
 } from "@/lib/portal/actions/leave";
+import { SubmitButton } from "@/components/portal/ui";
 import type { LeaveRequestWithPeople } from "@/lib/portal/leaves";
 
 function formatDate(value: string | null | undefined) {
@@ -80,9 +81,7 @@ export function LeaveRequestsTable({
         </select>
         <input name="start" type="date" className="h-10 rounded-xl border border-slate-300 px-3 text-sm" />
         <input name="end" type="date" className="h-10 rounded-xl border border-slate-300 px-3 text-sm" />
-        <button className="h-10 rounded-xl border border-blue-300 px-4 text-sm font-semibold text-blue-700">
-          Filter
-        </button>
+        <SubmitButton tone="secondary" pendingText="Filtering...">Filter</SubmitButton>
       </form>
 
       <section className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -130,13 +129,13 @@ export function LeaveRequestsTable({
                         <form action={reviewLeaveRequestAction}>
                           <input type="hidden" name="leave_request_id" value={request.id} />
                           <input type="hidden" name="decision" value="approved" />
-                          <button className="rounded-lg border border-emerald-200 px-2 py-1 text-xs font-bold text-emerald-700">✓</button>
+                          <SubmitButton tone="secondary" pendingText="Approving...">Approve</SubmitButton>
                         </form>
                         <form action={reviewLeaveRequestAction} className="flex gap-1">
                           <input type="hidden" name="leave_request_id" value={request.id} />
                           <input type="hidden" name="decision" value="rejected" />
                           <input name="rejection_reason" placeholder="Reason" className="h-7 w-24 rounded border border-slate-200 px-2 text-xs" />
-                          <button className="rounded-lg border border-rose-200 px-2 py-1 text-xs font-bold text-rose-700">×</button>
+                          <SubmitButton tone="danger" pendingText="Rejecting...">Reject</SubmitButton>
                         </form>
                       </>
                     ) : null}
@@ -148,7 +147,7 @@ export function LeaveRequestsTable({
                         <input type="hidden" name="start_date" value={request.start_date} />
                         <input type="hidden" name="end_date" value={request.end_date} />
                         <input type="hidden" name="reason" value={`Rejected leave converted to LOP: ${request.reason ?? ""}`} />
-                        <button className="rounded-lg border border-purple-200 px-2 py-1 text-xs font-bold text-purple-700">LOP</button>
+                        <SubmitButton tone="secondary" pendingText="Marking...">LOP</SubmitButton>
                       </form>
                     ) : null}
                   </div>
@@ -189,7 +188,7 @@ export function LeaveRequestsTable({
           </div>
           <input name="reason" required placeholder="Reason" className="h-10 rounded-xl border border-slate-300 px-3 text-sm" />
           <input name="mobile_number" required placeholder="Mobile number" className="h-10 rounded-xl border border-slate-300 px-3 text-sm" />
-          <button className="h-10 rounded-xl bg-blue-700 px-4 text-sm font-semibold text-white">Apply</button>
+          <SubmitButton pendingText="Applying...">Apply</SubmitButton>
         </form>
         <form action={markAbsentAction} className="grid gap-3">
           <h2 className="font-semibold text-slate-950">Mark Absent / LOP</h2>
@@ -205,7 +204,7 @@ export function LeaveRequestsTable({
           </div>
           <input name="reason" placeholder="Reason" className="h-10 rounded-xl border border-slate-300 px-3 text-sm" />
           <input name="mobile_number" placeholder="Mobile number" className="h-10 rounded-xl border border-slate-300 px-3 text-sm" />
-          <button className="h-10 rounded-xl bg-purple-700 px-4 text-sm font-semibold text-white">Mark LOP Absence</button>
+          <SubmitButton pendingText="Marking...">Mark LOP Absence</SubmitButton>
         </form>
       </section>
     </div>
