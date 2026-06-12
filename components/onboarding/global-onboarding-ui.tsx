@@ -15,6 +15,8 @@ import {
   uploadContractTemplateAction,
 } from "@/lib/portal/actions/global-onboarding";
 import { createEmployeeRequestAction, resendEmployeeInviteAction } from "@/lib/portal/actions/employee";
+import { getCompanyDocumentCompletionStatus, getEmployeeDocumentCompletionStatus } from "@/lib/portal/document-status";
+import type { DocumentRow } from "@/lib/portal/document-status";
 
 type Row = Record<string, unknown>;
 
@@ -25,6 +27,19 @@ function value(row: Row | null | undefined, key: string) {
 
 function rows(value: unknown) {
   return Array.isArray(value) ? (value as Row[]) : [];
+}
+
+function documentRows(value: Row[]): DocumentRow[] {
+  return value.map((row) => ({
+    id: String(row.id ?? ""),
+    document_type: typeof row.document_type === "string" ? row.document_type : null,
+    file_path: typeof row.file_path === "string" ? row.file_path : null,
+    verification_status: typeof row.verification_status === "string" ? row.verification_status : null,
+    replaced_by_document_id: typeof row.replaced_by_document_id === "string" ? row.replaced_by_document_id : null,
+    uploaded_at: typeof row.uploaded_at === "string" ? row.uploaded_at : null,
+    employee_id: typeof row.employee_id === "string" ? row.employee_id : null,
+    company_id: typeof row.company_id === "string" ? row.company_id : null,
+  }));
 }
 
 function fieldValue(values: Row[], fieldId: unknown) {
@@ -118,8 +133,16 @@ function Submit({ children, danger = false }: { children: React.ReactNode; dange
 
 function Badge({ value: badgeValue }: { value: unknown }) {
   const text = String(badgeValue ?? "unknown");
+  const normalized = text.toLowerCase().replaceAll(" ", "_");
+  const tone = normalized.includes("complete") || normalized.includes("approved") || normalized === "active"
+    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+    : normalized.includes("rejected") || normalized.includes("missing")
+      ? "border-rose-200 bg-rose-50 text-rose-700"
+      : normalized.includes("pending") || normalized.includes("submitted") || normalized.includes("correction")
+        ? "border-amber-200 bg-amber-50 text-amber-700"
+        : "border-slate-200 bg-slate-50 text-slate-700";
   return (
-    <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-semibold capitalize text-slate-700">
+    <span className={`inline-flex rounded-full border px-2 py-1 text-xs font-semibold capitalize ${tone}`}>
       {text.replaceAll("_", " ")}
     </span>
   );
@@ -560,6 +583,7 @@ function EmployeeSelfOnboarding({ data }: { data: Row }) {
   const statusText = String(status?.status ?? "Draft");
   const formLocked = statusText === "Approved";
   const missingDocuments = checklist.filter((item) => !item.approved);
+  const documentStatus = getEmployeeDocumentCompletionStatus(documentRows(documents), Boolean(experience.is_fresher ?? true));
   const missingSteps = employeeSteps.filter((step) => !completedSteps.includes(step));
   const missingCustomFields = customFields.filter((field) => Boolean(field.required) && !fieldValue(customValues, field.id));
   const rejectedDocuments = documents.filter((document) => document.verification_status === "Rejected");
@@ -602,7 +626,10 @@ function EmployeeSelfOnboarding({ data }: { data: Row }) {
         </div>
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Documents</p>
-          <p className="mt-2 text-lg font-bold text-slate-950">{documents.length}</p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <p className="text-lg font-bold text-slate-950">{documents.length}</p>
+            <Badge value={documentStatus.label} />
+          </div>
         </div>
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Corrections</p>
@@ -613,6 +640,9 @@ function EmployeeSelfOnboarding({ data }: { data: Row }) {
         {formLocked ? (
           <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-semibold text-emerald-800">
             Your onboarding is approved. Profile fields are locked; rejected document replacements remain available if requested later.
+            {documentStatus.status !== "docs_complete" ? (
+              <span className="mt-1 block">Your profile is approved. Some documents are still pending.</span>
+            ) : null}
           </div>
         ) : null}
         <StepTabs active={activeStep} setActive={setActiveStep} />
@@ -626,8 +656,11 @@ function EmployeeSelfOnboarding({ data }: { data: Row }) {
             <p className="mt-1 text-sm font-semibold text-slate-950">{missingCustomFields.length === 0 ? "Complete" : missingCustomFields.map((field) => String(field.field_label)).join(", ")}</p>
           </div>
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Document blockers</p>
-            <p className="mt-1 text-sm font-semibold text-slate-950">{missingDocuments.length === 0 ? "All required docs approved" : `${missingDocuments.length} pending or missing`}</p>
+            <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Document status</p>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <Badge value={documentStatus.label} />
+              <span className="text-sm font-semibold text-slate-950">{missingDocuments.length === 0 ? "All required docs approved" : `${missingDocuments.length} pending or missing`}</span>
+            </div>
           </div>
         </div>
         {saveMessage ? (
@@ -822,7 +855,13 @@ function ReviewTable({
                 ? item.entity_id === row.id
                 : item.entity_id === row.employee_id,
             );
-            const blockers = rowDocuments.filter((document) => document.verification_status === "Rejected" || document.verification_status === "Pending");
+            const documentStatus = row.document_completion_status as Row | undefined;
+            const derivedDocumentStatus = documentStatus ?? (
+              type === "company"
+                ? getCompanyDocumentCompletionStatus(documentRows(rowDocuments))
+                : getEmployeeDocumentCompletionStatus(documentRows(rowDocuments), true)
+            );
+            const attentionDocuments = rowDocuments.filter((document) => document.verification_status === "Rejected" || document.verification_status === "Pending");
             return (
               <tr key={String(row.id)} className="border-b border-slate-100 align-top">
                 <td className="py-3 pr-4 font-semibold">
@@ -831,8 +870,11 @@ function ReviewTable({
                     <div className="mt-3 grid min-w-[360px] gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600 md:grid-cols-2">
                       <div>
                         <p className="font-bold text-slate-950">Documents</p>
-                        <p>{rowDocuments.length} uploaded · {blockers.length} blocker(s)</p>
-                        {blockers.map((document) => (
+                        <div className="mt-1 flex flex-wrap items-center gap-2">
+                          <Badge value={derivedDocumentStatus.label} />
+                          <span>{rowDocuments.length} uploaded</span>
+                        </div>
+                        {attentionDocuments.map((document) => (
                           <p key={String(document.id)} className="mt-1 capitalize">
                             {String(document.document_type).replaceAll("_", " ")}: {String(document.verification_status)}
                           </p>
@@ -853,7 +895,12 @@ function ReviewTable({
                     </div>
                   </details>
                 </td>
-                <td className="py-3 pr-4"><Badge value={row.onboarding_status ?? row.status} /></td>
+                <td className="py-3 pr-4">
+                  <div className="flex flex-wrap gap-2">
+                    <Badge value={row.onboarding_status ?? row.status} />
+                    <Badge value={derivedDocumentStatus.label} />
+                  </div>
+                </td>
                 <td className="py-3 pr-4 text-slate-500">{String(row.country ?? employer?.name ?? "")}</td>
                 <td className="py-3 pr-4">
                   {type === "company" ? (

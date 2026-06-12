@@ -243,7 +243,7 @@ function createApproveEmployeeRequestSupabaseMock() {
   };
 }
 
-function createDocumentReviewSupabaseMock() {
+function createDocumentReviewSupabaseMock({ onboardingStatus = null as string | null } = {}) {
   const updates: Array<{ table: string; payload: Record<string, unknown> }> = [];
   const upserts: Array<{ table: string; payload: Record<string, unknown> }> = [];
 
@@ -260,7 +260,12 @@ function createDocumentReviewSupabaseMock() {
         return query;
       }),
       maybeSingle: vi.fn(async () => ({
-        data: name === "employees" ? { portal_user_id: null, employer_id: "employer_1" } : null,
+        data:
+          name === "employees"
+            ? { portal_user_id: null, employer_id: "employer_1" }
+            : name === "employee_onboarding_status" && onboardingStatus
+              ? { status: onboardingStatus }
+              : null,
         error: null,
       })),
       single: vi.fn(async () => ({
@@ -281,13 +286,18 @@ function createDocumentReviewSupabaseMock() {
   };
 }
 
-function createOnboardingApprovalGateSupabaseMock() {
+function createOnboardingApprovalAllowsPendingDocsSupabaseMock() {
   const upserts: Array<{ table: string; payload: Record<string, unknown> }> = [];
+  const updates: Array<{ table: string; payload: Record<string, unknown> }> = [];
 
   const table = (name: string) => {
     const query = {
       select: vi.fn(() => query),
       eq: vi.fn(() => query),
+      update: vi.fn((payload: Record<string, unknown>) => {
+        updates.push({ table: name, payload });
+        return query;
+      }),
       upsert: vi.fn((payload: Record<string, unknown>) => {
         upserts.push({ table: name, payload });
         return query;
@@ -296,8 +306,12 @@ function createOnboardingApprovalGateSupabaseMock() {
         data: name === "employee_experience" ? { is_fresher: true } : null,
         error: null,
       })),
+      single: vi.fn(async () => ({
+        data: name === "employees" ? { id: "employee_1", full_name: "Employee One", employer_id: "employer_1" } : { id: "row_1" },
+        error: null,
+      })),
       then:
-        name === "employee_documents"
+        name === "employee_documents" || name === "portal_users"
           ? vi.fn((resolve) => Promise.resolve({ data: [], error: null }).then(resolve))
           : undefined,
     };
@@ -307,6 +321,7 @@ function createOnboardingApprovalGateSupabaseMock() {
 
   return {
     upserts,
+    updates,
     client: {
       from: vi.fn(table),
     },
@@ -793,25 +808,66 @@ describe("onboarding core actions", () => {
     });
   });
 
-  test("admin onboarding approval is blocked until mandatory documents are approved", async () => {
+  test("document rejection keeps approved employee onboarding approved", async () => {
     const activeSession = {
       ...session,
       user: { ...session.user, status: "active" },
     };
     requirePortalRole.mockResolvedValue(activeSession);
-    const supabase = createOnboardingApprovalGateSupabaseMock();
+    const supabase = createDocumentReviewSupabaseMock({ onboardingStatus: "Approved" });
+    getSupabaseAdmin.mockReturnValue(supabase.client);
+    const { reviewEmployeeDocumentAction } = await import(
+      "@/lib/portal/actions/global-onboarding"
+    );
+
+    await reviewEmployeeDocumentAction(
+      form({ document_id: "doc_1", decision: "Rejected", remarks: "Upload a clearer copy." }),
+    );
+
+    expect(supabase.updates).toContainEqual({
+      table: "employee_documents",
+      payload: expect.objectContaining({
+        verification_status: "Rejected",
+      }),
+    });
+    expect(supabase.upserts).not.toContainEqual({
+      table: "employee_onboarding_status",
+      payload: expect.objectContaining({
+        status: "Needs Correction",
+      }),
+    });
+  });
+
+  test("admin onboarding approval allows pending mandatory documents", async () => {
+    const activeSession = {
+      ...session,
+      user: { ...session.user, status: "active" },
+    };
+    requirePortalRole.mockResolvedValue(activeSession);
+    const supabase = createOnboardingApprovalAllowsPendingDocsSupabaseMock();
     getSupabaseAdmin.mockReturnValue(supabase.client);
     const { reviewEmployeeOnboardingAction } = await import(
       "@/lib/portal/actions/global-onboarding"
     );
 
-    await expect(
-      reviewEmployeeOnboardingAction(
-        form({ employee_id: "employee_1", decision: "Approved" }),
-      ),
-    ).rejects.toThrow("mandatory employee documents");
+    await reviewEmployeeOnboardingAction(
+      form({ employee_id: "employee_1", decision: "Approved" }),
+    );
 
-    expect(supabase.upserts).toEqual([]);
+    expect(supabase.updates).toContainEqual({
+      table: "employees",
+      payload: expect.objectContaining({
+        status: "active",
+        lifecycle_status: "active",
+      }),
+    });
+    expect(supabase.upserts).toContainEqual({
+      table: "employee_onboarding_status",
+      payload: expect.objectContaining({
+        employee_id: "employee_1",
+        status: "Approved",
+      }),
+    });
   });
 
   test("admin can resend an employee invite and update invite metadata", async () => {

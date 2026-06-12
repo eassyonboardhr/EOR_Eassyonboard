@@ -3,6 +3,8 @@ import "server-only";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import {
   buildEmployeeDocumentChecklist,
+  getCompanyDocumentCompletionStatus,
+  getEmployeeDocumentCompletionStatus,
   withScopedCompanyDocumentUrls,
   withScopedEmployeeDocumentUrls,
 } from "@/lib/portal/document-access";
@@ -39,6 +41,9 @@ export async function getGlobalOnboardingData(
       .from("client_documents")
       .select("*, client_companies!inner(id, company_name, employer_id, employers(id, name))")
       .order("uploaded_at", { ascending: false });
+    const employeeExperienceQuery = supabase
+      .from("employee_experience")
+      .select("employee_id, is_fresher");
 
     if (employerFilter && employerFilter !== "all") {
       companiesQuery = companiesQuery.eq("employer_id", employerFilter);
@@ -62,12 +67,13 @@ export async function getGlobalOnboardingData(
       employeeDocumentsQuery = employeeDocumentsQuery.eq("verification_status", documentStatusFilter);
     }
 
-    const [companies, employeeStatuses, employeeRequests, documents, employeeDocuments, templates, fields, fieldValues, employers] = await Promise.all([
+    const [companies, employeeStatuses, employeeRequests, documents, employeeDocuments, employeeExperiences, templates, fields, fieldValues, employers] = await Promise.all([
       companiesQuery,
       employeeStatusesQuery,
       employeeRequestsQuery,
       companyDocumentsQuery,
       employeeDocumentsQuery,
+      employeeExperienceQuery,
       supabase.from("contract_templates").select("*, client_companies(id, company_name)").order("created_at", { ascending: false }),
       supabase.from("custom_fields").select("*").order("created_at", { ascending: false }),
       supabase.from("custom_field_values").select("*, custom_fields(*)").order("updated_at", { ascending: false }),
@@ -76,11 +82,22 @@ export async function getGlobalOnboardingData(
     const signedCompanyDocuments = await withScopedCompanyDocumentUrls(documents.data ?? [], session);
     const signedEmployeeDocuments = await withScopedEmployeeDocumentUrls(employeeDocuments.data ?? [], session);
     const signedTemplates = await withScopedCompanyDocumentUrls(templates.data ?? [], session);
+    const experiencesByEmployee = new Map((employeeExperiences.data ?? []).map((experience) => [experience.employee_id, experience.is_fresher]));
 
     return {
       mode: "admin" as const,
-      companies: companies.data ?? [],
-      employeeStatuses: employeeStatuses.data ?? [],
+      companies: (companies.data ?? []).map((company) => ({
+        ...company,
+        document_completion_status: getCompanyDocumentCompletionStatus(company.client_documents ?? []),
+      })),
+      employeeStatuses: (employeeStatuses.data ?? []).map((status) => {
+        const employeeId = status.employee_id;
+        const documentsForEmployee = signedEmployeeDocuments.filter((document) => document.employee_id === employeeId);
+        return {
+          ...status,
+          document_completion_status: getEmployeeDocumentCompletionStatus(documentsForEmployee, experiencesByEmployee.get(employeeId) ?? true),
+        };
+      }),
       employeeRequests: employeeRequests.data ?? [],
       companyDocuments: signedCompanyDocuments,
       employeeDocuments: signedEmployeeDocuments,

@@ -2,64 +2,26 @@ import "server-only";
 
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { isPlatformAdmin } from "@/lib/portal/session";
-import type { PortalSession } from "@/lib/portal/types";
-
-type DocumentRow = {
-  id: string;
-  document_type?: string;
-  file_path: string;
-  verification_status?: string | null;
-  replaced_by_document_id?: string | null;
-  uploaded_at?: string | null;
-  employee_id?: string | null;
-  company_id?: string | null;
+export {
+  allRequiredDocumentsApproved,
+  baseRequiredEmployeeDocuments,
+  buildEmployeeDocumentChecklist,
+  getCompanyDocumentCompletionStatus,
+  getEmployeeDocumentCompletionStatus,
+  requiredCompanyDocuments,
+  requiredEmployeeDocuments,
 };
-
-export const baseRequiredEmployeeDocuments = [
-  "passport_photo",
-  "aadhaar_card",
-  "pan_card",
-  "bank_proof",
-  "resume",
-] as const;
-
-export function requiredEmployeeDocuments(isFresher: boolean | null | undefined) {
-  return [
-    ...baseRequiredEmployeeDocuments,
-    ...(isFresher ? ["degree_certificate"] : ["salary_slip", "experience_letter", "relieving_letter"]),
-  ];
-}
-
-export function buildEmployeeDocumentChecklist(
-  documents: DocumentRow[],
-  isFresher: boolean | null | undefined,
-) {
-  return requiredEmployeeDocuments(isFresher).map((documentType) => {
-    const latest = documents
-      .filter((document) => document.document_type === documentType)
-      .sort((a, b) => {
-        const left = a.uploaded_at ?? "";
-        const right = b.uploaded_at ?? "";
-        return left.localeCompare(right) || a.id.localeCompare(b.id);
-      })
-      .at(-1);
-
-    return {
-      document_type: documentType,
-      uploaded: Boolean(latest),
-      approved: latest?.verification_status === "Approved",
-      status: latest?.verification_status ?? "Missing",
-      document_id: latest?.id ?? null,
-    };
-  });
-}
-
-export function allRequiredDocumentsApproved(
-  documents: DocumentRow[],
-  isFresher: boolean | null | undefined,
-) {
-  return buildEmployeeDocumentChecklist(documents, isFresher).every((item) => item.approved);
-}
+import type { DocumentRow } from "@/lib/portal/document-status";
+import {
+  allRequiredDocumentsApproved,
+  baseRequiredEmployeeDocuments,
+  buildEmployeeDocumentChecklist,
+  getCompanyDocumentCompletionStatus,
+  getEmployeeDocumentCompletionStatus,
+  requiredCompanyDocuments,
+  requiredEmployeeDocuments,
+} from "@/lib/portal/document-status";
+import type { PortalSession } from "@/lib/portal/types";
 
 export async function signedStorageUrl(bucket: string, path: string | null | undefined) {
   if (!path) return null;

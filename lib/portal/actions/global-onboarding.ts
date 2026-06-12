@@ -12,7 +12,7 @@ import {
   templateSchema,
 } from "@/lib/portal/global-onboarding-schema";
 import { onboardingCompletionPercentage } from "@/lib/portal/global-onboarding";
-import { allRequiredDocumentsApproved } from "@/lib/portal/document-access";
+import { getEmployeeDocumentCompletionStatus } from "@/lib/portal/document-access";
 import type { Json } from "@/lib/supabase/database.types";
 import type { PortalRole } from "@/lib/portal/types";
 
@@ -569,17 +569,8 @@ export async function saveEmployeeOnboardingStepAction(formData: FormData) {
   }
 
   if (step === "Documents") {
-    const [{ data: experience }, { data: documents }] = await Promise.all([
-      supabase.from("employee_experience").select("is_fresher").eq("employee_id", employee.id).maybeSingle(),
-      supabase.from("employee_documents").select("id, document_type, file_path, verification_status, uploaded_at").eq("employee_id", employee.id),
-    ]);
-    const checklist = allRequiredDocumentsApproved(
-      (documents ?? []).map((document) => ({ ...document, verification_status: "Approved" })),
-      experience?.is_fresher ?? true,
-    );
-    if (!checklist) {
-      throw new Error("Upload all mandatory documents before completing this step.");
-    }
+    // Document completion is tracked separately so employees can submit profile
+    // onboarding first and upload compliance files later.
   }
 
   await saveOnboardingProgress(employee.id, step);
@@ -635,18 +626,6 @@ export async function saveEmployeeSelfOnboardingAction() {
     companyId: await getEmployeeCompanyId(employee.employer_id),
   });
 
-  const { data: uploadedDocuments } = await supabase
-    .from("employee_documents")
-    .select("id, document_type, file_path, verification_status, uploaded_at")
-    .eq("employee_id", employee.id);
-  const allMandatoryUploaded = allRequiredDocumentsApproved(
-    (uploadedDocuments ?? []).map((document) => ({ ...document, verification_status: "Approved" })),
-    experience.data?.is_fresher ?? true,
-  );
-  if (!allMandatoryUploaded) {
-    throw new Error("Upload all mandatory employee documents before submitting onboarding.");
-  }
-
   const completion = onboardingCompletionPercentage({
     personal: true,
     address: true,
@@ -698,21 +677,7 @@ export async function reviewEmployeeOnboardingAction(formData: FormData) {
         .select("id, document_type, file_path, verification_status, replaced_by_document_id")
         .eq("employee_id", employeeId),
     ]);
-
-    if (!allRequiredDocumentsApproved(documents ?? [], employeeExperience?.is_fresher ?? true)) {
-      throw new Error("All mandatory employee documents must be approved before onboarding approval.");
-    }
-
-    const { data: pendingDocuments } = await supabase
-      .from("employee_documents")
-      .select("id")
-      .eq("employee_id", employeeId)
-      .neq("verification_status", "Approved")
-      .limit(1);
-
-    if ((pendingDocuments ?? []).length > 0) {
-      throw new Error("All uploaded documents must be approved before onboarding approval.");
-    }
+    const documentStatus = getEmployeeDocumentCompletionStatus(documents ?? [], employeeExperience?.is_fresher ?? true);
 
     const { data: employee } = await supabase
       .from("employees")
@@ -736,8 +701,11 @@ export async function reviewEmployeeOnboardingAction(formData: FormData) {
           .insert({
             sender_id: session.user.id,
             employer_id: employee.employer_id,
-            title: "Employee onboarding verified",
-            body: `${employee.full_name} has been verified. Please update their team, manager, leave policy, and notice period details from Employer Onboarding > Employee Setup.`,
+            title: documentStatus.status === "docs_complete" ? "Employee onboarding verified" : "Employee onboarding approved",
+            body:
+              documentStatus.status === "docs_complete"
+                ? `${employee.full_name} has been verified. Please update their team, manager, leave policy, and notice period details from Employer Onboarding > Employee Setup.`
+                : `${employee.full_name} has been approved and activated, but their document file is still marked ${documentStatus.label}. Please track pending compliance from Onboarding or Documents while updating team, manager, leave policy, and notice period details.`,
             priority: "important",
             requires_acknowledgement: true,
             action_url: "/dashboard/onboarding",
@@ -804,16 +772,24 @@ export async function reviewEmployeeDocumentAction(formData: FormData) {
     .eq("id", documentId);
 
   if (decision === "Rejected") {
-    await supabase.from("employee_onboarding_status").upsert(
-      {
-        employee_id: document.employee_id,
-        status: "Needs Correction",
-        reviewed_by: session.user.id,
-        reviewed_at: now,
-        remarks: remarks ?? "Document correction requested.",
-      },
-      { onConflict: "employee_id" },
-    );
+    const { data: onboardingStatus } = await supabase
+      .from("employee_onboarding_status")
+      .select("status")
+      .eq("employee_id", document.employee_id)
+      .maybeSingle();
+
+    if (onboardingStatus?.status !== "Approved") {
+      await supabase.from("employee_onboarding_status").upsert(
+        {
+          employee_id: document.employee_id,
+          status: "Needs Correction",
+          reviewed_by: session.user.id,
+          reviewed_at: now,
+          remarks: remarks ?? "Document correction requested.",
+        },
+        { onConflict: "employee_id" },
+      );
+    }
 
     const { data: employee } = await supabase
       .from("employees")
@@ -1041,11 +1017,6 @@ export async function recordEmployeeDocumentAction(formData: FormData) {
   const supabase = getSupabaseAdmin();
   const { data: employee } = await supabase.from("employees").select("id").eq("portal_user_id", session.user.id).single();
   if (!employee) throw new Error("Employee profile is not linked.");
-  const { data: onboardingStatus } = await supabase
-    .from("employee_onboarding_status")
-    .select("status")
-    .eq("employee_id", employee.id)
-    .maybeSingle();
 
   const path = `${employee.id}/${Date.now()}-${fileNameSafe(file.name)}`;
   const { data: previous } = await supabase
@@ -1058,10 +1029,6 @@ export async function recordEmployeeDocumentAction(formData: FormData) {
     .order("uploaded_at", { ascending: false })
     .limit(1)
     .maybeSingle();
-
-  if (onboardingStatus?.status === "Approved" && !previous) {
-    throw new Error("Approved onboarding documents are locked unless replacing a rejected document.");
-  }
 
   const { error: uploadError } = await supabase.storage.from("employee-documents").upload(path, file, { upsert: false });
   if (uploadError) throw new Error(uploadError.message);

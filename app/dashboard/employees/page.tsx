@@ -32,6 +32,7 @@ export default async function EmployeesDirectoryPage() {
                   <th className="py-3 pr-4">Employer</th>
                   <th className="py-3 pr-4">Team</th>
                   <th className="py-3 pr-4">Status</th>
+                  <th className="py-3 pr-4">Docs</th>
                   <th className="py-3 pr-4">Lifecycle</th>
                   <th className="py-3 pr-4">Start / Notice</th>
                   <th className="py-3 pr-4">Actions</th>
@@ -50,6 +51,14 @@ export default async function EmployeesDirectoryPage() {
                       <p className="text-slate-700 dark:text-slate-300">{employee.teams?.name ?? employee.department ?? "No team"}</p>
                     </td>
                     <td className="py-4 pr-4"><StatusBadge value={employee.status} /></td>
+                    <td className="py-4 pr-4">
+                      <StatusBadge value={employee.document_completion_status.label} />
+                      {employee.document_completion_status.status !== "docs_complete" ? (
+                        <p className="mt-1 text-xs text-slate-500">
+                          {employee.document_completion_status.missing} missing · {employee.document_completion_status.pending} pending · {employee.document_completion_status.rejected} rejected
+                        </p>
+                      ) : null}
+                    </td>
                     <td className="py-4 pr-4"><StatusBadge value={employee.lifecycle_status} /></td>
                     <td className="py-4 pr-4">
                       <p className="text-slate-700 dark:text-slate-300">{formatDate(employee.start_date)}</p>

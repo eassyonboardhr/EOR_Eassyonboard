@@ -250,7 +250,14 @@ export function Panel({
 
 export function StatusBadge({ value }: { value: string | null | undefined }) {
   const text = value ?? "unknown";
-  const tone = text.includes("approved") || text === "active" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : text.includes("pending") || text.includes("submitted") || text.includes("requested") ? "bg-orange-50 text-orange-700 border-orange-200" : "bg-slate-50 text-slate-700 border-slate-200";
+  const normalized = text.toLowerCase().replaceAll(" ", "_");
+  const tone = normalized.includes("complete") || normalized.includes("approved") || normalized === "active"
+    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+    : normalized.includes("rejected") || normalized.includes("missing")
+      ? "bg-rose-50 text-rose-700 border-rose-200"
+      : normalized.includes("pending") || normalized.includes("submitted") || normalized.includes("requested")
+        ? "bg-orange-50 text-orange-700 border-orange-200"
+        : "bg-slate-50 text-slate-700 border-slate-200";
 
   return (
     <span className={`inline-flex rounded-full border px-2 py-1 text-xs font-medium ${tone}`}>

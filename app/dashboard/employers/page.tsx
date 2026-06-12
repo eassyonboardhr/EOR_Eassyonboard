@@ -28,6 +28,7 @@ export default async function EmployersDirectoryPage() {
                   <th className="py-3 pr-4">Employer</th>
                   <th className="py-3 pr-4">Contact</th>
                   <th className="py-3 pr-4">Status</th>
+                  <th className="py-3 pr-4">Docs</th>
                   <th className="py-3 pr-4">Employees</th>
                   <th className="py-3 pr-4">Created</th>
                   <th className="py-3 pr-4">Actions</th>
@@ -45,6 +46,14 @@ export default async function EmployersDirectoryPage() {
                       <p className="mt-1 text-xs text-slate-500">{employer.contact_email}</p>
                     </td>
                     <td className="py-4 pr-4"><StatusBadge value={employer.status} /></td>
+                    <td className="py-4 pr-4">
+                      <StatusBadge value={employer.document_completion_status.label} />
+                      {employer.document_completion_status.status !== "docs_complete" ? (
+                        <p className="mt-1 text-xs text-slate-500">
+                          {employer.document_completion_status.missing} missing required company doc(s)
+                        </p>
+                      ) : null}
+                    </td>
                     <td className="py-4 pr-4">
                       <p className="font-semibold text-slate-950 dark:text-slate-100">{employer.employee_count}</p>
                       <p className="mt-1 text-xs text-slate-500">{employer.active_employee_count} active</p>
