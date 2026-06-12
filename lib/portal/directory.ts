@@ -80,7 +80,7 @@ export async function getEmployeeDirectoryData(session: PortalSession) {
   const supabase = getSupabaseAdmin();
   let query = supabase
     .from("employees")
-    .select("id, full_name, email, job_title, department, status, lifecycle_status, start_date, notice_period_days, employer_id, employers(id, name), teams(id, name)")
+    .select("id, full_name, email, job_title, department, status, lifecycle_status, start_date, notice_period_days, employer_id, employers(id, name), teams!employees_team_id_fkey(id, name)")
     .order("created_at", { ascending: false });
 
   if (!isPlatformAdmin(session.user.role)) {
