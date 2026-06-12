@@ -1,5 +1,8 @@
 import { describe, expect, test, vi } from "vitest";
-import { financeSyncPayloadSchema } from "@/lib/portal/finance-sync";
+import {
+  financeSyncPayloadSchema,
+  resolvePaymentReceivedAt,
+} from "@/lib/portal/finance-sync";
 
 vi.mock("server-only", () => ({}));
 
@@ -16,6 +19,7 @@ describe("finance sync payload", () => {
         month: 5,
         year: 2026,
         status: "received",
+        paymentReceivedAt: "2026-06-10",
       },
       lineItems: [{
         id: "line_1",
@@ -50,6 +54,7 @@ describe("finance sync payload", () => {
     expect(parsed.source).toBe("invoice_generator");
     expect(parsed.invoice.month).toBe(5);
     expect(parsed.invoice.status).toBe("received");
+    expect(parsed.invoice.paymentReceivedAt).toBe("2026-06-10");
     expect(parsed.lineItems[0].payoutMonthlyUsdCentsSnapshot).toBe(0);
     expect(parsed.salaryPayments[0].actualPaidInrCents).toBe(20120000);
     expect(parsed.statementRows[0].dollarInwardUsdCents).toBe(300000);
@@ -68,5 +73,32 @@ describe("finance sync payload", () => {
         status: "generated",
       },
     })).toThrow();
+  });
+
+  test("uses the source received timestamp for received invoices", () => {
+    expect(resolvePaymentReceivedAt({
+      status: "received",
+      sourcePaymentReceivedAt: "2026-06-10",
+      existingPaymentReceivedAt: null,
+      fallbackSyncedAt: "2026-06-12T08:00:00.000Z",
+    })).toBe("2026-06-10T00:00:00.000Z");
+  });
+
+  test("does not overwrite an existing received timestamp when older payloads omit it", () => {
+    expect(resolvePaymentReceivedAt({
+      status: "received",
+      sourcePaymentReceivedAt: null,
+      existingPaymentReceivedAt: "2026-06-09T00:00:00.000Z",
+      fallbackSyncedAt: "2026-06-12T08:00:00.000Z",
+    })).toBe("2026-06-09T00:00:00.000Z");
+  });
+
+  test("does not set payment received timestamps for non-received statuses", () => {
+    expect(resolvePaymentReceivedAt({
+      status: "generated",
+      sourcePaymentReceivedAt: "2026-06-10",
+      existingPaymentReceivedAt: "2026-06-09T00:00:00.000Z",
+      fallbackSyncedAt: "2026-06-12T08:00:00.000Z",
+    })).toBeUndefined();
   });
 });

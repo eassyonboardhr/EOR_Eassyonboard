@@ -107,6 +107,12 @@ export function calculateLeaveDays(
   };
 }
 
+export function payableLeaveDates(calculation: LeaveCalculation) {
+  return calculation.days
+    .filter((day) => !day.isHoliday)
+    .map((day) => day.date);
+}
+
 export function allocatePaidAndLopDays(totalLeaveDays: number, availablePaidDays: number) {
   const paidLeaveDays = Math.max(0, Math.min(totalLeaveDays, availablePaidDays));
   return {

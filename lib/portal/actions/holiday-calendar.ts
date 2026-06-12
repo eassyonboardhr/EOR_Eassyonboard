@@ -242,6 +242,12 @@ async function applyApprovedCalendarRequest(
       .eq("employer_id", request.employer_id)
       .eq("active", true);
 
+    await supabase
+      .from("weekly_off_rules")
+      .delete()
+      .eq("employer_id", request.employer_id)
+      .eq("source_request_id", request.id);
+
     const { error } = await supabase.from("weekly_off_rules").insert(
       weekdays.map((weekday) => ({
         employer_id: request.employer_id,
@@ -341,10 +347,9 @@ export async function reviewHolidayCalendarChangeRequestAction(formData: FormDat
 
   if (decision === "approved") {
     await applyApprovedCalendarRequest(request, session.user.id);
-    await notifyActiveEmployees(request.employer_id, session.user.id, request.title);
   }
 
-  const { error: updateError } = await supabase
+  const { data: reviewedRequest, error: updateError } = await supabase
     .from("holiday_calendar_change_requests")
     .update({
       status: decision,
@@ -353,9 +358,17 @@ export async function reviewHolidayCalendarChangeRequestAction(formData: FormDat
       admin_notes: optionalString(formData, "admin_notes"),
     })
     .eq("id", requestId)
-    .eq("status", "pending");
+    .eq("status", "pending")
+    .select("id")
+    .single();
 
-  if (updateError) throw new Error(updateError.message);
+  if (updateError || !reviewedRequest) {
+    throw new Error(updateError?.message ?? "Calendar request was already reviewed.");
+  }
+
+  if (decision === "approved") {
+    await notifyActiveEmployees(request.employer_id, session.user.id, request.title);
+  }
 
   await writeAudit(session.user, `${decision}_holiday_calendar_request`, "holiday_calendar_change_request", requestId, {
     employer_id: request.employer_id,

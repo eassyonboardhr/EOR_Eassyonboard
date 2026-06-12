@@ -232,11 +232,12 @@ export async function decideResignationAction(formData: FormData) {
   await supabase
     .from("resignations")
     .update({
-      status: decision === "approved" ? "employer_acknowledged" : "cancelled",
+      status: decision === "approved" ? "forwarded_to_employer" : "cancelled",
       rejection_reason: decision === "rejected" ? optionalString(formData, "rejection_reason") : null,
       decided_by: session.user.id,
       decided_at: new Date().toISOString(),
       admin_notes: optionalString(formData, "admin_notes"),
+      forwarded_at: decision === "approved" ? new Date().toISOString() : null,
     })
     .eq("id", resignationId);
 

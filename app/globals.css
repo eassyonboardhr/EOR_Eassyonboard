@@ -56,6 +56,10 @@ textarea {
   background-color: #1e293b;
 }
 
+.dark .bg-slate-200 {
+  background-color: #334155;
+}
+
 .dark .bg-blue-50 {
   background-color: #172554;
 }
@@ -98,6 +102,12 @@ textarea {
   border-color: #047857;
 }
 
+.dark .border-emerald-100,
+.dark .border-green-100,
+.dark .border-green-200 {
+  border-color: #047857;
+}
+
 .dark .border-orange-200,
 .dark .border-amber-200 {
   border-color: #b45309;
@@ -130,7 +140,9 @@ textarea {
 }
 
 .dark .text-emerald-700,
-.dark .text-emerald-800 {
+.dark .text-emerald-800,
+.dark .text-green-700,
+.dark .text-green-800 {
   color: #6ee7b7;
 }
 
@@ -153,6 +165,11 @@ textarea {
 
 .dark .text-sky-700 {
   color: #7dd3fc;
+}
+
+.dark .text-purple-700,
+.dark .text-purple-800 {
+  color: #d8b4fe;
 }
 
 .dark input,
@@ -179,8 +196,37 @@ textarea {
   background-color: #111827;
 }
 
+.dark table tbody,
+.dark tbody.bg-white,
+.dark .divide-y > :not([hidden]) ~ :not([hidden]) {
+  border-color: #1e293b;
+}
+
 .dark tr {
   border-color: #1e293b;
+}
+
+.dark input:disabled,
+.dark select:disabled,
+.dark textarea:disabled,
+.dark button:disabled {
+  background-color: #1e293b;
+  color: #64748b;
+  cursor: not-allowed;
+}
+
+.dark .hover\:bg-slate-50:hover,
+.dark .hover\:bg-slate-100:hover {
+  background-color: #1e293b;
+}
+
+.dark .hover\:bg-blue-50:hover {
+  background-color: #1e3a8a;
+}
+
+.dark .ring-slate-200,
+.dark .ring-slate-300 {
+  --tw-ring-color: #334155;
 }
 
 .dark .shadow-sm,

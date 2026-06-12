@@ -13,7 +13,7 @@ import { writeAudit } from "@/lib/portal/actions/audit";
 import {
   allocatePaidAndLopDays,
   calculateLeaveDays,
-  eachDateInRange,
+  payableLeaveDates,
 } from "@/lib/portal/leave-utils";
 import {
   getApprovedLeaveCalendarPolicy,
@@ -387,8 +387,18 @@ export async function reviewLeaveRequestAction(formData: FormData) {
       .eq("id", requestId)
       .eq("status", "pending");
 
-    const leaveDates = eachDateInRange(request.start_date, request.end_date);
-    const payableDates = leaveDates.slice(0, totalLeaveDays);
+    const calendarPolicy = await getApprovedLeaveCalendarPolicy(
+      request.employer_id,
+      request.start_date,
+      request.end_date,
+    );
+    const calculation = calculateLeaveDays(
+      request.start_date,
+      request.end_date,
+      calendarPolicy.holidays.map((holiday) => holiday.date),
+      toLeaveCalendarPolicy(calendarPolicy),
+    );
+    const payableDates = payableLeaveDates(calculation).slice(0, totalLeaveDays);
     const lopDateSet = new Set(payableDates.slice(allocation.paidLeaveDays));
 
     await supabase

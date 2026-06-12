@@ -439,6 +439,60 @@ function createTeamManagementSupabaseMock() {
   };
 }
 
+function createResignationFlowSupabaseMock(initialResignationStatus = "forwarded_to_employer") {
+  const updates: Array<{ table: string; payload: Record<string, unknown>; filters: Array<{ column: string; value: unknown }> }> = [];
+  const inserts: Array<{ table: string; payload: unknown }> = [];
+
+  const table = (name: string) => {
+    const filters: Array<{ column: string; value: unknown }> = [];
+    const query = {
+      select: vi.fn(() => query),
+      eq: vi.fn((column: string, value: unknown) => {
+        filters.push({ column, value });
+        return query;
+      }),
+      insert: vi.fn((payload: unknown) => {
+        inserts.push({ table: name, payload });
+        return query;
+      }),
+      update: vi.fn((payload: Record<string, unknown>) => {
+        updates.push({ table: name, payload, filters: [...filters] });
+        return query;
+      }),
+      single: vi.fn(async () => {
+        if (name === "resignations") {
+          return {
+            data: {
+              id: "resignation_1",
+              employee_id: "employee_1",
+              employer_id: "employer_1",
+              status: initialResignationStatus,
+              employees: { portal_user_id: "portal_employee_1", full_name: "Employee" },
+            },
+            error: null,
+          };
+        }
+
+        if (name === "notices") {
+          return { data: { id: "notice_1" }, error: null };
+        }
+
+        return { data: { id: "row_1" }, error: null };
+      }),
+    };
+
+    return query;
+  };
+
+  return {
+    inserts,
+    updates,
+    client: {
+      from: vi.fn(table),
+    },
+  };
+}
+
 beforeEach(() => {
   getPortalSession.mockResolvedValue(session);
   requirePortalRole.mockResolvedValue(session);
@@ -845,6 +899,79 @@ describe("team management hardening", () => {
         team_id: "team_new",
         employee_id: "employee_1",
         role_in_team: "Designer",
+      }),
+    });
+  });
+});
+
+describe("resignation workflow safeguards", () => {
+  test("admin approval forwards resignation to employer instead of acknowledging it", async () => {
+    const activeSession = {
+      ...session,
+      user: { ...session.user, status: "active" },
+    };
+    requirePortalRole.mockResolvedValue(activeSession);
+    const supabase = createResignationFlowSupabaseMock("submitted_to_admin");
+    getSupabaseAdmin.mockReturnValue(supabase.client);
+    const { decideResignationAction } = await import("@/lib/portal/actions/offboarding");
+
+    await decideResignationAction(
+      form({ resignation_id: "resignation_1", decision: "approved", admin_notes: "Forward to employer." }),
+    );
+
+    expect(supabase.updates).toContainEqual({
+      table: "resignations",
+      payload: expect.objectContaining({
+        status: "forwarded_to_employer",
+        admin_notes: "Forward to employer.",
+        forwarded_at: expect.any(String),
+      }),
+      filters: [],
+    });
+  });
+
+  test("employer acceptance calculates last working day and sends the employee notice", async () => {
+    const employerSession = {
+      ...session,
+      user: {
+        ...session.user,
+        role: "employer_admin",
+        status: "active",
+        employer_id: "employer_1",
+      },
+    };
+    requirePortalRole.mockResolvedValue(employerSession);
+    const supabase = createResignationFlowSupabaseMock();
+    getSupabaseAdmin.mockReturnValue(supabase.client);
+    const { employerAcceptResignationAction } = await import("@/lib/portal/actions/offboarding");
+
+    await employerAcceptResignationAction(
+      form({ resignation_id: "resignation_1", notice_period_days: "30", employer_notes: "Accepted." }),
+    );
+
+    expect(supabase.updates).toContainEqual({
+      table: "resignations",
+      payload: expect.objectContaining({
+        status: "employer_acknowledged",
+        notice_period_days: 30,
+        calculated_last_working_day: expect.any(String),
+        employer_notes: "Accepted.",
+      }),
+      filters: [],
+    });
+    expect(supabase.inserts).toContainEqual({
+      table: "notices",
+      payload: expect.objectContaining({
+        title: "Resignation accepted",
+        body: expect.stringContaining("last working day"),
+        action_url: "/dashboard/employee/leaves",
+      }),
+    });
+    expect(supabase.inserts).toContainEqual({
+      table: "notice_recipients",
+      payload: expect.objectContaining({
+        notice_id: "notice_1",
+        recipient_user_id: "portal_employee_1",
       }),
     });
   });

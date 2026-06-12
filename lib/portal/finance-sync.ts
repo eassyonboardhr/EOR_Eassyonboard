@@ -29,6 +29,7 @@ const invoiceSchema = z.object({
   billingDate: nullableString,
   dueDate: nullableString,
   status: z.string().min(1),
+  paymentReceivedAt: nullableString,
   noteText: nullableString,
   subtotalUsdCents: z.number().int().default(0),
   adjustmentsUsdCents: z.number().int().default(0),
@@ -144,10 +145,28 @@ function count(result: SyncResult, status: "created" | "updated" | "skipped") {
   result[status] += 1;
 }
 
+export function resolvePaymentReceivedAt({
+  status,
+  sourcePaymentReceivedAt,
+  existingPaymentReceivedAt,
+  fallbackSyncedAt,
+}: {
+  status: string;
+  sourcePaymentReceivedAt?: string | null;
+  existingPaymentReceivedAt?: string | null;
+  fallbackSyncedAt: string;
+}) {
+  if (status !== "received") return undefined;
+  if (sourcePaymentReceivedAt) return new Date(sourcePaymentReceivedAt).toISOString();
+  if (existingPaymentReceivedAt) return existingPaymentReceivedAt;
+  return fallbackSyncedAt;
+}
+
 export async function syncInvoiceGeneratorFinance(rawPayload: unknown): Promise<SyncResult> {
   const payload = financeSyncPayloadSchema.parse(rawPayload);
   const supabase = getSupabaseAdmin() as any;
   const result: SyncResult = { created: 0, updated: 0, skipped: 0, unmappedCompanies: [], unmappedEmployees: [], errors: [] };
+  const syncedAt = new Date().toISOString();
 
   await supabase.from("finance_sync_sources").upsert({
     source_key: payload.source,
@@ -201,6 +220,18 @@ export async function syncInvoiceGeneratorFinance(rawPayload: unknown): Promise<
   }
 
   const invoiceSyncStatus = employerId ? "synced" : "needs_mapping";
+  const { data: existingInvoice } = await supabase
+    .from("finance_invoices")
+    .select("id, payment_received_at")
+    .eq("source_key", payload.source)
+    .eq("external_invoice_id", payload.invoice.id)
+    .maybeSingle();
+  const paymentReceivedAt = resolvePaymentReceivedAt({
+    status: payload.invoice.status,
+    sourcePaymentReceivedAt: payload.invoice.paymentReceivedAt,
+    existingPaymentReceivedAt: existingInvoice?.payment_received_at,
+    fallbackSyncedAt: syncedAt,
+  });
   count(result, await upsertOne(supabase, "finance_invoices", {
     source_key: payload.source,
     external_invoice_id: payload.invoice.id,
@@ -214,15 +245,15 @@ export async function syncInvoiceGeneratorFinance(rawPayload: unknown): Promise<
     due_date: payload.invoice.dueDate ?? null,
     status: payload.invoice.status,
     last_source_status: payload.invoice.status,
-    last_status_synced_at: new Date().toISOString(),
-    ...(payload.invoice.status === "received" ? { payment_received_at: new Date().toISOString() } : {}),
+    last_status_synced_at: syncedAt,
+    ...(paymentReceivedAt ? { payment_received_at: paymentReceivedAt } : {}),
     note_text: payload.invoice.noteText ?? null,
     subtotal_usd_cents: payload.invoice.subtotalUsdCents,
     adjustments_usd_cents: payload.invoice.adjustmentsUsdCents,
     grand_total_usd_cents: payload.invoice.grandTotalUsdCents,
     pdf_path: payload.invoice.pdfPath ?? null,
     sync_status: invoiceSyncStatus,
-    synced_at: new Date().toISOString(),
+    synced_at: syncedAt,
   }, "source_key,external_invoice_id") as "created" | "updated");
 
   const { data: invoiceRow } = await supabase

@@ -3,6 +3,7 @@ import {
   allocatePaidAndLopDays,
   calculateLeaveDays,
   eachDateInRange,
+  payableLeaveDates,
 } from "@/lib/portal/leave-utils";
 
 describe("leave date calculations", () => {
@@ -63,6 +64,20 @@ describe("leave date calculations", () => {
     expect(allocatePaidAndLopDays(4, 2)).toEqual({ paidLeaveDays: 2, lopDays: 2 });
     expect(allocatePaidAndLopDays(4, 7)).toEqual({ paidLeaveDays: 4, lopDays: 0 });
     expect(allocatePaidAndLopDays(4, 0)).toEqual({ paidLeaveDays: 0, lopDays: 4 });
+  });
+
+  test("returns only payable dates for LOP allocation when weekends and holidays are inside the range", () => {
+    const calculation = calculateLeaveDays("2025-05-23", "2025-05-28", ["2025-05-27"]);
+
+    expect(payableLeaveDates(calculation)).toEqual([
+      "2025-05-23",
+      "2025-05-26",
+      "2025-05-28",
+    ]);
+    expect(allocatePaidAndLopDays(calculation.totalLeaveDays, 1)).toEqual({
+      paidLeaveDays: 1,
+      lopDays: 2,
+    });
   });
 
   test("builds an inclusive date range", () => {
