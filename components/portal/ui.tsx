@@ -66,6 +66,7 @@ function navSections(session: PortalSession, unreadNotices = 0, unreadMessages =
     { label: "Dashboard", icon: "D", href: dashboardHref(session) },
     { label: "Employers", icon: "ER", href: "/dashboard/employers" },
     { label: "Employees", icon: "EE", href: "/dashboard/employees" },
+    { label: "Imports", icon: "IM", href: "/dashboard/imports" },
     { label: "Worktree", icon: "WT", href: "/dashboard/worktree" },
     { label: "Leaves", icon: "L", href: "/dashboard/admin/leaves" },
     { label: "Documents", icon: "DOC", href: "/dashboard/documents" },
@@ -125,7 +126,7 @@ export async function PortalShell({
         <nav className="flex-1 space-y-1 px-3 py-5">
           {navigation.map((item) => {
             const isDashboard = item.label === "Dashboard";
-            const activeSectionTitles = ["worktree", "leaves", "notices", "messages", "onboarding", "resignations", "offboarding", "team", "employers", "employees"];
+            const activeSectionTitles = ["worktree", "leaves", "notices", "messages", "onboarding", "resignations", "offboarding", "team", "employers", "employees", "imports"];
             const isActive =
               (isDashboard && !activeSectionTitles.some((section) => activeTitle.includes(section))) ||
               activeTitle.includes(item.label.toLowerCase());
