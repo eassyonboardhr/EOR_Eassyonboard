@@ -268,7 +268,6 @@ export async function inferFinancePayrollAllocationsAction(formData: FormData) {
 
   revalidatePath("/dashboard/finances");
   revalidatePath("/dashboard/worktree");
-  return { inferredCount: drafts.length };
 }
 
 export async function updateFinancePayrollAllocationAction(formData: FormData) {

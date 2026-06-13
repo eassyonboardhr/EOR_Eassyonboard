@@ -167,10 +167,6 @@ function employerNameFrom(row: any) {
   return firstRelated(row.employers)?.name ?? "Employer";
 }
 
-function employeeNameFrom(row: any) {
-  return firstRelated(row.employees)?.full_name ?? row.employee_name_snapshot ?? "Employee";
-}
-
 function rowPaymentForInvoice(payments: any[], invoiceId: string) {
   return payments.find((payment) => payment.invoice_id === invoiceId) ?? null;
 }

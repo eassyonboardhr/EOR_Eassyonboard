@@ -179,9 +179,8 @@ describe("finance allocation actions", () => {
     getSupabaseAdmin.mockReturnValue(supabase.client);
     const { inferFinancePayrollAllocationsAction } = await import("@/lib/portal/actions/finance");
 
-    const result = await inferFinancePayrollAllocationsAction(form({ employerId: "employer_1", payrollMonth: "2026-06" }));
+    await inferFinancePayrollAllocationsAction(form({ employerId: "employer_1", payrollMonth: "2026-06" }));
 
-    expect(result.inferredCount).toBe(1);
     expect(supabase.upserts).toContainEqual(expect.objectContaining({
       table: "finance_payroll_allocations",
       payload: [expect.objectContaining({
