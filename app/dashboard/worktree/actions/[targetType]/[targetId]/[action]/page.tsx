@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PortalShell } from "@/components/portal/ui";
 import { withScopedEmployeeDocumentUrls } from "@/lib/portal/document-access";
+import { getEmployeeFinanceRolePreview } from "@/lib/portal/finances";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { isPlatformAdmin, requirePortalRole } from "@/lib/portal/session";
 import type { PortalSession } from "@/lib/portal/types";
@@ -645,8 +646,9 @@ export default async function WorktreeActionPage({
     throw new Error("You cannot view this employee action.");
   }
 
-  const canViewEmployeeBilling = action === "finances" && (isAdmin || session.user.role === "employer_admin");
-  const canViewEmployeePay = action === "finances" && isAdmin;
+  const financePreview = action === "finances"
+    ? await getEmployeeFinanceRolePreview(session, data.employee.id)
+    : null;
   const documentSummary = data.documents.reduce(
     (acc, document) => {
       const status = document.verification_status ?? "Pending";
@@ -825,94 +827,104 @@ export default async function WorktreeActionPage({
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h2 className="text-base font-semibold text-slate-950">Finance Records</h2>
+                <h2 className="text-base font-semibold text-slate-950">Finance Role Preview</h2>
                 <p className="mt-1 text-sm text-slate-500">
-                  {isAdmin ? "Admin-only employee pay and employer billing view." : "Employer billing view for this employee."}
+                  {isAdmin ? "Admin can see exactly what employer and employee users see, plus allocation controls." : session.user.role === "employer_admin" ? "Employer-safe statement for this employee." : "Your salary statement."}
                 </p>
               </div>
               <Link href={`/dashboard/finances?employee=${data.employee.id}`} className="rounded-xl border border-blue-200 px-4 py-2 text-sm font-semibold text-blue-700">
                 Open Finance Page
               </Link>
             </div>
-            {canViewEmployeeBilling ? (
-              <div className="mt-4 grid gap-3 md:grid-cols-3">
-                <Field label="Synced employer billing" value={cents(sumCents(data.financeLineItems, (row) => row.billed_total_usd_cents))} />
-                <Field label="Billing months" value={new Set(data.financeLineItems.map((row) => row.finance_invoices?.month_key).filter(Boolean)).size} />
-                <Field label="Latest billing status" value={statusLabel(data.financeLineItems[0]?.finance_invoices?.status, { showCashout: isAdmin })} />
-              </div>
-            ) : (
-              <p className="mt-2 text-sm text-slate-600">
-                Employee finance details are available from your own finance page.
-              </p>
-            )}
-            {canViewEmployeeBilling && data.financeLineItems.length > 0 ? (
+
+            {isAdmin || session.user.role === "employer_admin" ? (
               <div className="mt-5 overflow-hidden rounded-xl border border-slate-200">
+                <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
+                  <p className="text-sm font-semibold text-slate-950">Employer View Preview</p>
+                  <p className="mt-1 text-xs text-slate-500">Employer-safe invoice statement; salary internals and cashout rates are hidden.</p>
+                </div>
                 <table className="min-w-full divide-y divide-slate-200 text-sm">
                   <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
                     <tr>
                       <th className="px-4 py-3">Month</th>
                       <th className="px-4 py-3">Invoice</th>
+                      <th className="px-4 py-3">Designation</th>
                       <th className="px-4 py-3">Status</th>
                       <th className="px-4 py-3 text-right">Employer billing</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 bg-white">
-                    {data.financeLineItems.map((item) => (
+                    {(financePreview?.employerView.rows ?? []).map((item) => (
                       <tr key={item.id}>
-                        <td className="px-4 py-3 text-slate-600">{item.finance_invoices?.month_key ?? "Not set"}</td>
-                        <td className="px-4 py-3 font-semibold text-slate-950">{item.finance_invoices?.invoice_number ?? "Invoice"}</td>
-                        <td className="px-4 py-3 text-slate-600">{statusLabel(item.finance_invoices?.status, { showCashout: isAdmin })}</td>
-                        <td className="px-4 py-3 text-right font-semibold text-slate-950">{cents(item.billed_total_usd_cents)}</td>
+                        <td className="px-4 py-3 text-slate-600">{item.invoiceMonth ?? "Not set"}</td>
+                        <td className="px-4 py-3 font-semibold text-slate-950">{item.invoiceNumber}</td>
+                        <td className="px-4 py-3 text-slate-600">{item.designation ?? item.teamName ?? "Not set"}</td>
+                        <td className="px-4 py-3 text-slate-600">{item.paymentStatus}</td>
+                        <td className="px-4 py-3 text-right font-semibold text-slate-950">{cents(item.amountUsdCents)}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
+                {(financePreview?.employerView.rows ?? []).length === 0 ? <p className="p-4 text-sm text-slate-500">No employer-safe statement rows found for this employee.</p> : null}
               </div>
-            ) : canViewEmployeeBilling ? (
-              <p className="mt-4 text-sm text-slate-500">No synced month-wise billing rows found for this employee yet.</p>
             ) : null}
-            {canViewEmployeePay ? (
+
+            {isAdmin || session.user.role === "employee" ? (
               <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <p className="text-sm font-semibold text-slate-950">Admin employee pay summary</p>
+                <p className="text-sm font-semibold text-slate-950">{isAdmin ? "Employee View Preview" : "My Salary Statement"}</p>
+                <p className="mt-1 text-xs text-slate-500">INR salary components only; employer invoices and cashout rates are hidden.</p>
                 <div className="mt-3 grid gap-3 md:grid-cols-3">
-                  <Field label="Dollar inward" value={cents(sumCents(data.statementRows, (row) => row.dollar_inward_usd_cents))} />
-                  <Field label="Effective inward" value={cents(sumCents(data.statementSummaries, (row) => row.effective_dollar_inward_usd_cents))} />
-                  <Field label="Actual paid INR" value={cents(sumCents(data.salaryPayments, (row) => row.actual_paid_inr_cents), "INR")} />
-                  <Field label="PF INR" value={cents(sumCents(data.salaryPayments, (row) => row.pf_inr_cents), "INR")} />
-                  <Field label="TDS INR" value={cents(sumCents(data.salaryPayments, (row) => row.tds_inr_cents), "INR")} />
-                  <Field
-                    label="Current monthly salary"
-                    value={money(data.compensation?.monthly_salary, data.compensation?.currency ?? "USD")}
-                  />
+                  <Field label="Actual paid INR" value={cents(financePreview?.employeeView.totals.actualPaidInrCents ?? 0, "INR")} />
+                  <Field label="PF INR" value={cents(financePreview?.employeeView.totals.pfInrCents ?? 0, "INR")} />
+                  <Field label="TDS INR" value={cents(financePreview?.employeeView.totals.tdsInrCents ?? 0, "INR")} />
                 </div>
-                {data.salaryPayments.length > 0 || data.statementRows.length > 0 ? (
-                  <div className="mt-5 grid gap-3 md:grid-cols-2">
-                    <div className="rounded-xl border border-slate-200 bg-white p-4">
-                      <p className="text-sm font-semibold text-slate-950">Dollar inward rows</p>
-                      <div className="mt-3 grid gap-2">
-                        {data.statementRows.slice(0, 6).map((row) => (
-                          <div key={row.id} className="flex items-center justify-between gap-3 text-sm">
-                            <span className="text-slate-600">{row.month_key} · {row.finance_invoices?.invoice_number ?? "Invoice"}</span>
-                            <span className="font-semibold text-slate-950">{cents(row.dollar_inward_usd_cents)}</span>
-                          </div>
+                {(financePreview?.employeeView.rows ?? []).length > 0 ? (
+                  <div className="mt-5 overflow-hidden rounded-xl border border-slate-200 bg-white">
+                    <table className="min-w-full divide-y divide-slate-200 text-sm">
+                      <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+                        <tr>
+                          <th className="px-4 py-3">Payroll month</th>
+                          <th className="px-4 py-3">Gross INR</th>
+                          <th className="px-4 py-3">PF</th>
+                          <th className="px-4 py-3">TDS</th>
+                          <th className="px-4 py-3">Actual paid</th>
+                          <th className="px-4 py-3">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 bg-white">
+                        {financePreview?.employeeView.rows.slice(0, 8).map((row) => (
+                          <tr key={row.id}>
+                            <td className="px-4 py-3 text-slate-600">{row.payrollMonth ?? "Not set"}</td>
+                            <td className="px-4 py-3">{cents(row.grossInrCents, "INR")}</td>
+                            <td className="px-4 py-3">{cents(row.pfInrCents, "INR")}</td>
+                            <td className="px-4 py-3">{cents(row.tdsInrCents, "INR")}</td>
+                            <td className="px-4 py-3 font-semibold text-slate-950">{cents(row.actualPaidInrCents, "INR")}</td>
+                            <td className="px-4 py-3">{row.paid ? "Paid" : "Pending"}</td>
+                          </tr>
                         ))}
-                        {data.statementRows.length === 0 ? <p className="text-sm text-slate-500">No statement rows synced yet.</p> : null}
-                      </div>
-                    </div>
-                    <div className="rounded-xl border border-slate-200 bg-white p-4">
-                      <p className="text-sm font-semibold text-slate-950">INR salary payments</p>
-                      <div className="mt-3 grid gap-2">
-                        {data.salaryPayments.slice(0, 6).map((row) => (
-                          <div key={row.id} className="flex items-center justify-between gap-3 text-sm">
-                            <span className="text-slate-600">{row.month_key} · {row.paid_status ? "Paid" : "Pending"}</span>
-                            <span className="font-semibold text-slate-950">{cents(row.actual_paid_inr_cents, "INR")}</span>
-                          </div>
-                        ))}
-                        {data.salaryPayments.length === 0 ? <p className="text-sm text-slate-500">No salary payments synced yet.</p> : null}
-                      </div>
-                    </div>
+                      </tbody>
+                    </table>
                   </div>
-                ) : null}
+                ) : (
+                  <p className="mt-4 text-sm text-slate-500">No salary statement rows found for this employee.</p>
+                )}
+              </div>
+            ) : null}
+
+            {isAdmin ? (
+              <div className="mt-6 rounded-xl border border-slate-200 bg-white p-4">
+                <p className="text-sm font-semibold text-slate-950">Admin Reconciliation</p>
+                <p className="mt-1 text-xs text-slate-500">Allocation and cashout details remain admin-only.</p>
+                <div className="mt-3 grid gap-2">
+                  {(financePreview?.adminAllocations ?? []).slice(0, 6).map((allocation) => (
+                    <div key={allocation.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+                      <span className="font-semibold text-slate-950">{allocation.invoiceNumber}</span>
+                      <span className="text-slate-600">Invoice {allocation.invoiceMonth ?? "not set"} · Paid {allocation.paidMonth ?? "not set"} · Payroll {allocation.payrollMonth ?? "not set"}</span>
+                      <span className="font-semibold text-slate-950">{cents(allocation.allocatedUsdCents)} @ {allocation.cashoutRate ?? "rate not set"}</span>
+                    </div>
+                  ))}
+                  {(financePreview?.adminAllocations ?? []).length === 0 ? <p className="text-sm text-slate-500">No allocations found for this employee yet.</p> : null}
+                </div>
               </div>
             ) : null}
           </div>
