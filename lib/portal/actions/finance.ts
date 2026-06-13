@@ -2,12 +2,23 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { revalidatePath } from "next/cache";
+import {
+  inferPayrollAllocations,
+  refreshAllocationCashout,
+} from "@/lib/portal/finance-allocations";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { requirePortalRole, isPlatformAdmin } from "@/lib/portal/session";
 
 function value(formData: FormData, key: string) {
   const raw = formData.get(key);
   return typeof raw === "string" && raw.trim() ? raw.trim() : null;
+}
+
+function numberValue(formData: FormData, key: string) {
+  const raw = value(formData, key);
+  if (raw === null) return null;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 async function requireAdmin() {
@@ -178,4 +189,158 @@ export async function markFinanceInvoicePaymentReceivedAction(formData: FormData
 
   revalidatePath("/dashboard/finances");
   revalidatePath("/dashboard/finances/mapping");
+}
+
+export async function inferFinancePayrollAllocationsAction(formData: FormData) {
+  const session = await requireAdmin();
+  const employerId = value(formData, "employerId");
+  const employeeId = value(formData, "employeeId");
+  const payrollMonth = value(formData, "payrollMonth");
+  const supabase = getSupabaseAdmin() as any;
+
+  let salaryQuery = supabase
+    .from("finance_employee_salary_payments")
+    .select("id, source_key, employer_id, employee_id, month_key, salary_usd_cents")
+    .not("employee_id", "is", null)
+    .not("employer_id", "is", null)
+    .eq("sync_status", "synced");
+  let lineItemQuery = supabase
+    .from("finance_invoice_line_items")
+    .select("id, invoice_id, employer_id, employee_id, billed_total_usd_cents, finance_invoices(id, month_key)")
+    .not("employee_id", "is", null)
+    .not("employer_id", "is", null)
+    .eq("sync_status", "synced");
+  let paymentQuery = supabase
+    .from("finance_invoice_payments")
+    .select("id, invoice_id, employer_id, payment_month, usd_inr_rate");
+  let allocationQuery = supabase
+    .from("finance_payroll_allocations")
+    .select("id, salary_payment_id, allocation_source");
+
+  if (employerId) {
+    salaryQuery = salaryQuery.eq("employer_id", employerId);
+    lineItemQuery = lineItemQuery.eq("employer_id", employerId);
+    paymentQuery = paymentQuery.eq("employer_id", employerId);
+    allocationQuery = allocationQuery.eq("employer_id", employerId);
+  }
+  if (employeeId) {
+    salaryQuery = salaryQuery.eq("employee_id", employeeId);
+    lineItemQuery = lineItemQuery.eq("employee_id", employeeId);
+    allocationQuery = allocationQuery.eq("employee_id", employeeId);
+  }
+  if (payrollMonth) {
+    salaryQuery = salaryQuery.eq("month_key", payrollMonth);
+    allocationQuery = allocationQuery.eq("payroll_month", payrollMonth);
+  }
+
+  const [{ data: salaryPayments }, { data: lineItems }, { data: payments }, { data: existingAllocations }] = await Promise.all([
+    salaryQuery,
+    lineItemQuery,
+    paymentQuery,
+    allocationQuery,
+  ]);
+
+  const drafts = inferPayrollAllocations({
+    salaryPayments: salaryPayments ?? [],
+    lineItems: lineItems ?? [],
+    payments: payments ?? [],
+    existingAllocations: existingAllocations ?? [],
+  });
+
+  if (drafts.length) {
+    const { error } = await supabase.from("finance_payroll_allocations").upsert(
+      drafts.map((draft) => ({
+        ...draft,
+        created_by: session.user.id,
+        updated_by: session.user.id,
+      })),
+      { onConflict: "source_key,salary_payment_id" },
+    );
+    if (error) throw new Error(error.message);
+  }
+
+  await supabase.from("audit_events").insert({
+    actor_user_id: session.user.id,
+    action: "infer_finance_payroll_allocations",
+    entity_type: "finance_payroll_allocation",
+    metadata: { count: drafts.length, employerId, employeeId, payrollMonth },
+  });
+
+  revalidatePath("/dashboard/finances");
+  revalidatePath("/dashboard/worktree");
+  return { inferredCount: drafts.length };
+}
+
+export async function updateFinancePayrollAllocationAction(formData: FormData) {
+  const session = await requireAdmin();
+  const allocationId = value(formData, "allocationId");
+  const invoicePaymentId = value(formData, "invoicePaymentId");
+  const allocatedUsdCents = numberValue(formData, "allocatedUsdCents");
+  const manualRate = value(formData, "cashoutRateOverride");
+  const overrideReason = value(formData, "overrideReason");
+
+  if (!allocationId) {
+    throw new Error("Allocation is required.");
+  }
+
+  const supabase = getSupabaseAdmin() as any;
+  const { data: allocation, error: allocationError } = await supabase
+    .from("finance_payroll_allocations")
+    .select("*")
+    .eq("id", allocationId)
+    .single();
+  if (allocationError) throw new Error(allocationError.message);
+
+  let payment = null;
+  if (invoicePaymentId) {
+    const { data, error } = await supabase
+      .from("finance_invoice_payments")
+      .select("*, finance_invoices(id, month_key)")
+      .eq("id", invoicePaymentId)
+      .single();
+    if (error) throw new Error(error.message);
+    payment = data;
+  }
+
+  const invoice = payment ? (Array.isArray(payment.finance_invoices) ? payment.finance_invoices[0] : payment.finance_invoices) : null;
+  const cashout = refreshAllocationCashout({
+    paymentRate: payment?.usd_inr_rate ?? allocation.cashout_rate,
+    manualRate,
+    overrideReason,
+  });
+  const payload = {
+    invoice_payment_id: invoicePaymentId ?? allocation.invoice_payment_id,
+    invoice_id: payment?.invoice_id ?? allocation.invoice_id,
+    invoice_month: invoice?.month_key ?? allocation.invoice_month,
+    paid_month: payment?.payment_month ?? allocation.paid_month,
+    allocated_usd_cents: allocatedUsdCents ?? allocation.allocated_usd_cents,
+    cashout_rate: cashout.cashout_rate,
+    cashout_rate_source: cashout.cashout_rate_source,
+    override_reason: cashout.override_reason,
+    allocation_source: "manual",
+    updated_by: session.user.id,
+  };
+
+  const { error } = await supabase
+    .from("finance_payroll_allocations")
+    .update(payload)
+    .eq("id", allocationId);
+  if (error) throw new Error(error.message);
+
+  await supabase.from("audit_events").insert({
+    actor_user_id: session.user.id,
+    action: "update_finance_payroll_allocation",
+    entity_type: "finance_payroll_allocation",
+    entity_id: allocationId,
+    metadata: {
+      invoicePaymentId: payload.invoice_payment_id,
+      allocatedUsdCents: payload.allocated_usd_cents,
+      cashoutRate: payload.cashout_rate,
+      cashoutRateSource: payload.cashout_rate_source,
+      overrideReason: payload.override_reason,
+    },
+  });
+
+  revalidatePath("/dashboard/finances");
+  revalidatePath("/dashboard/worktree");
 }
