@@ -33,11 +33,23 @@ export function RouteProgress() {
   }, []);
 
   return (
-    <div
-      className={`fixed left-0 top-0 z-[60] h-1 bg-blue-600 shadow-[0_0_18px_rgba(37,99,235,0.45)] transition-all duration-300 ${
-        loading ? "w-full opacity-100" : "w-0 opacity-0"
-      }`}
-      aria-hidden="true"
-    />
+    <>
+      <div
+        className={`fixed left-0 top-0 z-[60] h-1 bg-blue-600 shadow-[0_0_18px_rgba(37,99,235,0.45)] transition-all duration-300 ${
+          loading ? "w-full opacity-100" : "w-0 opacity-0"
+        }`}
+        aria-hidden="true"
+      />
+      <div
+        role="status"
+        aria-live="polite"
+        className={`fixed right-4 top-4 z-[70] inline-flex items-center gap-2 rounded-full border border-blue-200 bg-white px-4 py-2 text-sm font-semibold text-blue-700 shadow-lg transition-all duration-200 dark:border-blue-900 dark:bg-slate-900 dark:text-blue-200 ${
+          loading ? "translate-y-0 opacity-100" : "-translate-y-2 pointer-events-none opacity-0"
+        }`}
+      >
+        <span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-r-transparent" aria-hidden="true" />
+        Loading...
+      </div>
+    </>
   );
 }

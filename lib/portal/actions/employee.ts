@@ -227,6 +227,7 @@ export async function approveEmployeeRequestAction(formData: FormData) {
     calculated_monthly_salary: monthlySalary,
   });
   revalidatePath("/dashboard/admin");
+  revalidatePath("/dashboard/employees");
   revalidatePath("/dashboard/onboarding");
   revalidatePath("/dashboard/employer");
 }
@@ -288,6 +289,7 @@ export async function resendEmployeeInviteAction(formData: FormData) {
   }
 
   revalidatePath("/dashboard/admin");
+  revalidatePath("/dashboard/employees");
   revalidatePath("/dashboard/onboarding");
 }
 
@@ -309,5 +311,6 @@ export async function rejectEmployeeRequestAction(formData: FormData) {
 
   await writeAudit(session.user, "reject_employee_request", "employee_request", requestId);
   revalidatePath("/dashboard/admin");
+  revalidatePath("/dashboard/employees");
   revalidatePath("/dashboard/onboarding");
 }

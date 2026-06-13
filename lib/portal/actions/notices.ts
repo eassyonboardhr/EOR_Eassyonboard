@@ -150,6 +150,7 @@ export async function sendNoticeAction(formData: FormData) {
   revalidatePath("/dashboard/admin");
   revalidatePath("/dashboard/employer");
   revalidatePath("/dashboard/employee");
+  revalidatePath("/dashboard/notices");
 }
 
 export async function sendTargetedNoticeAction(formData: FormData) {

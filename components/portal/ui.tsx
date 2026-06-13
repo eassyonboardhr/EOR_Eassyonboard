@@ -128,8 +128,7 @@ export async function PortalShell({
             const activeSectionTitles = ["worktree", "leaves", "notices", "messages", "onboarding", "resignations", "offboarding", "team", "employers", "employees"];
             const isActive =
               (isDashboard && !activeSectionTitles.some((section) => activeTitle.includes(section))) ||
-              activeTitle.includes(item.label.toLowerCase()) ||
-              (item.label === "Messages" && activeTitle.includes("notices"));
+              activeTitle.includes(item.label.toLowerCase());
             return (
               <Link
                 key={item.label}
@@ -152,24 +151,6 @@ export async function PortalShell({
               </Link>
             );
           })}
-          <div className="pt-5">
-            <p className="px-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-              {session.user.role === "employee" ? "Self service" : session.user.role === "employer_admin" ? "Employer" : "Admin"}
-            </p>
-            {session.user.role === "employee" ? null : <Link
-              href="/dashboard/worktree"
-              className={`mt-2 flex h-10 items-center gap-3 rounded-lg px-3 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                activeTitle.includes("worktree")
-                  ? "bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-200"
-                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
-              }`}
-            >
-              <span className="flex h-6 w-6 items-center justify-center rounded-md border border-slate-200 bg-white text-[10px] font-bold text-slate-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300">
-                WT
-              </span>
-              Worktree
-            </Link>}
-          </div>
         </nav>
 
         <div className="border-t border-slate-100 p-4 dark:border-slate-800">

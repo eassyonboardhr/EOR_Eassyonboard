@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type {
   WorktreeEmployeeNode,
   WorktreeModel,
@@ -488,6 +488,9 @@ function WorktreeCanvas({
   mode: WorktreePageData["mode"];
 }) {
   const [selected, setSelected] = useState<SelectedNode | null>(null);
+  const [zoom, setZoom] = useState(1);
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const employer = model.employer;
   const employeeCount = model.teams.reduce((count, team) => count + team.employees.length + (team.manager ? 1 : 0), 0);
   const modeTitle =
@@ -502,6 +505,17 @@ function WorktreeCanvas({
       : mode === "employer"
         ? "All teams are shown horizontally in one organization page."
         : "Self-service view for the signed-in employee.";
+  const zoomPercent = Math.round(zoom * 100);
+  const adjustZoom = (delta: number) => {
+    setZoom((current) => Math.min(1.5, Math.max(0.5, Number((current + delta).toFixed(2)))));
+  };
+  const fitToScreen = () => {
+    const viewportWidth = viewportRef.current?.clientWidth ?? 0;
+    const contentWidth = contentRef.current?.scrollWidth ?? 0;
+    if (!viewportWidth || !contentWidth) return;
+    const nextZoom = Math.min(1.2, Math.max(0.5, (viewportWidth - 48) / contentWidth));
+    setZoom(Number(nextZoom.toFixed(2)));
+  };
 
   return (
     <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
@@ -512,16 +526,29 @@ function WorktreeCanvas({
             <p className="mt-1 text-sm text-slate-500">{modeSubtitle}</p>
           </div>
           <div className="flex items-center gap-2">
-            <button type="button" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm">
+            <button type="button" onClick={() => adjustZoom(-0.1)} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm">
+              -
+            </button>
+            <button type="button" onClick={() => setZoom(1)} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm">
+              Reset
+            </button>
+            <button type="button" onClick={() => adjustZoom(0.1)} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm">
+              +
+            </button>
+            <button type="button" onClick={fitToScreen} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm">
               Fit to Screen
             </button>
             <span className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm">
-              100%
+              {zoomPercent}%
             </span>
           </div>
         </div>
-        <div className="overflow-x-auto bg-slate-50 p-6">
-          <div className="min-w-max pb-4">
+        <div ref={viewportRef} className="overflow-x-auto bg-slate-50 p-6">
+          <div
+            className="min-w-max pb-4 transition-transform duration-200"
+            style={{ transform: `scale(${zoom})`, transformOrigin: "top center" }}
+          >
+            <div ref={contentRef}>
             <div className="flex flex-col items-center">
               <WorktreeNode
                 title={employer.name}
@@ -551,6 +578,7 @@ function WorktreeCanvas({
                   />
                 ))}
               </div>
+            </div>
             </div>
           </div>
         </div>

@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { getEmployeeDeactivationStatus, getEmployerDeactivationPreview, type DeactivationStatus } from "@/lib/portal/actions/deactivation";
 import { getCompanyDocumentCompletionStatus, getEmployeeDocumentCompletionStatus, type DocumentCompletionStatus } from "@/lib/portal/document-status";
 import { isPlatformAdmin } from "@/lib/portal/session";
 import type { PortalSession } from "@/lib/portal/types";
@@ -16,6 +17,7 @@ type EmployerDirectoryRow = {
   employee_count: number;
   active_employee_count: number;
   document_completion_status: DocumentCompletionStatus;
+  deactivation_status: DeactivationStatus;
 };
 
 type EmployeeDirectoryRow = {
@@ -32,11 +34,12 @@ type EmployeeDirectoryRow = {
   employers?: { id: string; name: string } | null;
   teams?: { id: string; name: string } | null;
   document_completion_status: DocumentCompletionStatus;
+  deactivation_status: DeactivationStatus;
 };
 
 export async function getEmployerDirectoryData(session: PortalSession) {
   if (!isPlatformAdmin(session.user.role)) {
-    return { allowed: false, employers: [] as EmployerDirectoryRow[] };
+    return { allowed: false, employers: [] as EmployerDirectoryRow[], leads: [], adminUsers: [] };
   }
 
   const supabase = getSupabaseAdmin();
@@ -65,31 +68,41 @@ export async function getEmployerDirectoryData(session: PortalSession) {
     counts.set(employee.employer_id, current);
   }
 
+  const employerRows = await Promise.all((employers ?? []).map(async (employer) => {
+    const count = counts.get(employer.id) ?? { total: 0, active: 0 };
+    const employerCompanies = (companies ?? []).filter((company) => company.employer_id === employer.id);
+    const companyStatuses = employerCompanies.map((company) => getCompanyDocumentCompletionStatus(company.client_documents ?? []));
+    const documentStatus = companyStatuses.find((status) => status.status === "docs_rejected")
+      ?? companyStatuses.find((status) => status.status === "docs_missing")
+      ?? companyStatuses.find((status) => status.status === "docs_pending")
+      ?? companyStatuses[0]
+      ?? getCompanyDocumentCompletionStatus([]);
+    return {
+      ...employer,
+      status: employer.status,
+      employee_count: count.total,
+      active_employee_count: count.active,
+      document_completion_status: documentStatus,
+      deactivation_status: await getEmployerDeactivationPreview(employer.id),
+    };
+  }));
+
+  const [{ data: leads }, { data: adminUsers }] = await Promise.all([
+    supabase.from("employer_leads").select("*").order("created_at", { ascending: false }),
+    supabase.from("portal_users").select("id, employer_id, email, status").eq("role", "employer_admin"),
+  ]);
+
   return {
     allowed: true,
-    employers: (employers ?? []).map((employer) => {
-      const count = counts.get(employer.id) ?? { total: 0, active: 0 };
-      const employerCompanies = (companies ?? []).filter((company) => company.employer_id === employer.id);
-      const companyStatuses = employerCompanies.map((company) => getCompanyDocumentCompletionStatus(company.client_documents ?? []));
-      const documentStatus = companyStatuses.find((status) => status.status === "docs_rejected")
-        ?? companyStatuses.find((status) => status.status === "docs_missing")
-        ?? companyStatuses.find((status) => status.status === "docs_pending")
-        ?? companyStatuses[0]
-        ?? getCompanyDocumentCompletionStatus([]);
-      return {
-        ...employer,
-        status: employer.status,
-        employee_count: count.total,
-        active_employee_count: count.active,
-        document_completion_status: documentStatus,
-      };
-    }) satisfies EmployerDirectoryRow[],
+    employers: employerRows satisfies EmployerDirectoryRow[],
+    leads: leads ?? [],
+    adminUsers: adminUsers ?? [],
   };
 }
 
 export async function getEmployeeDirectoryData(session: PortalSession) {
   if (session.user.role === "employee") {
-    return { allowed: false, employees: [] as EmployeeDirectoryRow[] };
+    return { allowed: false, employees: [] as EmployeeDirectoryRow[], employeeRequests: [] };
   }
 
   const supabase = getSupabaseAdmin();
@@ -117,16 +130,30 @@ export async function getEmployeeDirectoryData(session: PortalSession) {
 
   const experienceByEmployee = new Map((experiences ?? []).map((experience) => [experience.employee_id, experience.is_fresher]));
 
+  const employeeRows = await Promise.all((data ?? []).map(async (employee) => ({
+    ...employee,
+    employers: Array.isArray(employee.employers) ? employee.employers[0] : employee.employers,
+    teams: Array.isArray(employee.teams) ? employee.teams[0] : employee.teams,
+    document_completion_status: getEmployeeDocumentCompletionStatus(
+      (documents ?? []).filter((document) => document.employee_id === employee.id),
+      experienceByEmployee.get(employee.id) ?? true,
+    ),
+    deactivation_status: await getEmployeeDeactivationStatus(employee.id),
+  })));
+
+  let employeeRequestsQuery = supabase
+    .from("employee_requests")
+    .select("*, employers(id, name)")
+    .order("created_at", { ascending: false });
+  if (!isPlatformAdmin(session.user.role)) {
+    employeeRequestsQuery = employeeRequestsQuery.eq("employer_id", session.user.employer_id ?? "");
+  }
+  const { data: employeeRequests, error: requestError } = await employeeRequestsQuery;
+  if (requestError) throw new Error(requestError.message);
+
   return {
     allowed: true,
-    employees: (data ?? []).map((employee) => ({
-      ...employee,
-      employers: Array.isArray(employee.employers) ? employee.employers[0] : employee.employers,
-      teams: Array.isArray(employee.teams) ? employee.teams[0] : employee.teams,
-      document_completion_status: getEmployeeDocumentCompletionStatus(
-        (documents ?? []).filter((document) => document.employee_id === employee.id),
-        experienceByEmployee.get(employee.id) ?? true,
-      ),
-    })) as EmployeeDirectoryRow[],
+    employees: employeeRows as EmployeeDirectoryRow[],
+    employeeRequests: employeeRequests ?? [],
   };
 }

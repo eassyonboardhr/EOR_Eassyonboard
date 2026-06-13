@@ -95,6 +95,7 @@ export async function createEmployerInviteAction(formData: FormData) {
   });
 
   revalidatePath("/dashboard/admin");
+  revalidatePath("/dashboard/employers");
 }
 
 export async function approveLeadAction(formData: FormData) {
@@ -159,6 +160,7 @@ export async function approveLeadAction(formData: FormData) {
   });
 
   revalidatePath("/dashboard/admin");
+  revalidatePath("/dashboard/employers");
 }
 
 export async function rejectLeadAction(formData: FormData) {
@@ -178,4 +180,5 @@ export async function rejectLeadAction(formData: FormData) {
 
   await writeAudit(session.user, "reject_lead", "employer_lead", leadId);
   revalidatePath("/dashboard/admin");
+  revalidatePath("/dashboard/employers");
 }

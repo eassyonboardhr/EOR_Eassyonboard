@@ -29,6 +29,19 @@ export default async function ReportsPage() {
             Employer exports include only their company data. Admin exports include all currently visible portal records.
           </p>
         </Panel>
+        <Panel
+          title="Privacy Boundary"
+          description="Compliance check for salary and billing separation across portal roles."
+        >
+          <div id="privacy-boundary" className="grid gap-3 md:grid-cols-2">
+            <div className="rounded-xl border border-slate-200 p-4 text-sm text-slate-600 dark:border-slate-800 dark:text-slate-400">
+              Employee salary records live in <span className="font-mono">employee_compensation</span> and are hidden from employer dashboards.
+            </div>
+            <div className="rounded-xl border border-slate-200 p-4 text-sm text-slate-600 dark:border-slate-800 dark:text-slate-400">
+              Employer billing records live in <span className="font-mono">employer_billing</span> and are hidden from employee dashboards.
+            </div>
+          </div>
+        </Panel>
       </div>
     </PortalShell>
   );

@@ -10,6 +10,7 @@ import {
   requirePortalRole,
 } from "@/lib/portal/session";
 import { writeAudit } from "@/lib/portal/actions/audit";
+import { createAdminDeactivationReminder } from "@/lib/portal/actions/deactivation";
 import {
   calculateLastWorkingDay,
   canCompleteOffboarding,
@@ -161,6 +162,19 @@ export async function employerAcceptResignationAction(formData: FormData) {
         recipient_user_id: portalUserId,
       });
     }
+  }
+
+  if (lastWorkingDay <= new Date().toISOString().slice(0, 10)) {
+    const employeeName = Array.isArray(resignation.employees)
+      ? resignation.employees[0]?.full_name
+      : resignation.employees?.full_name;
+    await createAdminDeactivationReminder({
+      actorId: session.user.id,
+      employeeId: resignation.employee_id,
+      employerId: resignation.employer_id,
+      employeeName: employeeName ?? "Employee",
+      reason: "post_resignation_notice",
+    });
   }
 
   await writeAudit(session.user, "accept_resignation_with_notice_period", "resignation", resignationId, {
@@ -365,7 +379,7 @@ export async function completeOffboardingAction(formData: FormData) {
 
   const { data: offboarding } = await supabase
     .from("offboarding_cases")
-    .select("id, employee_id, status, target_last_working_day")
+    .select("id, employee_id, employer_id, status, target_last_working_day, employees(full_name)")
     .eq("id", offboardingId)
     .single();
 
@@ -390,6 +404,17 @@ export async function completeOffboardingAction(formData: FormData) {
     .from("employees")
     .update({ lifecycle_status: "offboarded" })
     .eq("id", offboarding.employee_id);
+
+  const employeeName = Array.isArray(offboarding.employees)
+    ? offboarding.employees[0]?.full_name
+    : offboarding.employees?.full_name;
+  await createAdminDeactivationReminder({
+    actorId: session.user.id,
+    employeeId: offboarding.employee_id,
+    employerId: offboarding.employer_id,
+    employeeName: employeeName ?? "Employee",
+    reason: "completed_offboarding",
+  });
 
   await writeAudit(session.user, "complete_offboarding", "offboarding_case", offboardingId);
   revalidatePath("/dashboard/offboarding");

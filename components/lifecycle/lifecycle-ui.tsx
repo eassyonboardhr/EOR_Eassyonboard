@@ -6,6 +6,7 @@ import {
   createEmployeeRequestAction,
   rejectEmployeeRequestAction,
 } from "@/lib/portal/actions/employee";
+import { PendingSubmitButton } from "@/components/portal/pending-submit-button";
 import {
   approveOffboardingAction,
   completeOffboardingAction,
@@ -183,7 +184,14 @@ function Submit({ children, tone = "primary" }: { children: React.ReactNode; ton
       : tone === "secondary"
         ? "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
         : "bg-blue-700 text-white hover:bg-blue-800";
-  return <button className={`h-10 rounded-xl px-4 text-sm font-semibold transition ${cls}`}>{children}</button>;
+  return (
+    <PendingSubmitButton
+      className={`inline-flex h-10 items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold transition ${cls}`}
+      pendingText="Working..."
+    >
+      {children}
+    </PendingSubmitButton>
+  );
 }
 
 function LimitedState({ label }: { label: string }) {
