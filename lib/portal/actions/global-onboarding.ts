@@ -571,6 +571,11 @@ export async function saveEmployeeOnboardingStepAction(formData: FormData) {
   if (step === "Documents") {
     // Document completion is tracked separately so employees can submit profile
     // onboarding first and upload compliance files later.
+    if (formData.get("skip_documents") === "1") {
+      await writeAudit(session.user, "skip_employee_onboarding_documents", "employee", employee.id, {
+        source: "employee_self_onboarding",
+      });
+    }
   }
 
   await saveOnboardingProgress(employee.id, step);
@@ -942,6 +947,19 @@ export async function uploadCompanyDocumentAction(formData: FormData) {
   await writeAudit(session.user, "upload_company_document", "client_document", data.id);
   revalidatePath("/dashboard/onboarding");
   revalidatePath("/dashboard/worktree");
+}
+
+export async function skipCompanyDocumentsAction(formData: FormData) {
+  const session = await requirePortalRole(["super_admin", "admin", "employer_admin"]);
+  const companyId = requireString(formData, "company_id");
+
+  await assertCompanyAccess(companyId, session.user.role, session.user.employer_id);
+  await writeAudit(session.user, "skip_company_onboarding_documents", "client_company", companyId, {
+    source: "company_onboarding",
+  });
+
+  revalidatePath("/dashboard/onboarding");
+  revalidatePath("/dashboard/documents");
 }
 
 export async function uploadContractTemplateAction(formData: FormData) {

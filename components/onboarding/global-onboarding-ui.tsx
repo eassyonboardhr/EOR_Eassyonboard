@@ -11,6 +11,7 @@ import {
   saveEmployeeOnboardingStepAction,
   saveEmployeeSelfOnboardingAction,
   saveEmployerOnboardingAction,
+  skipCompanyDocumentsAction,
   uploadCompanyDocumentAction,
   uploadContractTemplateAction,
 } from "@/lib/portal/actions/global-onboarding";
@@ -400,26 +401,41 @@ function CompanyDocumentForm({ companies }: { companies: Row[] }) {
   }
 
   return (
-    <form action={uploadCompanyDocumentAction} className="grid gap-4 md:grid-cols-3">
-      <label className="grid gap-1 text-sm font-medium text-slate-700">
-        Company
-        <select name="company_id" className="h-10 rounded-xl border border-slate-300 px-3 text-sm">
-          {companies.map((company) => (
-            <option key={String(company.id)} value={String(company.id)}>
-              {String(company.company_name ?? "Company")}
-            </option>
-          ))}
-        </select>
-      </label>
-      <Select name="document_type" label="Document Type" options={["incorporation_certificate", "company_logo", "authorized_signatory_id", "supporting_document"]} />
-      <label className="grid gap-1 text-sm font-medium text-slate-700">
-        File
-        <input name="file" type="file" required className="h-10 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm" />
-      </label>
-      <div className="md:col-span-3">
-        <Submit>Upload Company Document</Submit>
-      </div>
-    </form>
+    <div className="grid gap-4">
+      <form action={uploadCompanyDocumentAction} className="grid gap-4 md:grid-cols-3">
+        <label className="grid gap-1 text-sm font-medium text-slate-700">
+          Company
+          <select name="company_id" className="h-10 rounded-xl border border-slate-300 px-3 text-sm">
+            {companies.map((company) => (
+              <option key={String(company.id)} value={String(company.id)}>
+                {String(company.company_name ?? "Company")}
+              </option>
+            ))}
+          </select>
+        </label>
+        <Select name="document_type" label="Document Type" options={["incorporation_certificate", "company_logo", "authorized_signatory_id", "supporting_document"]} />
+        <label className="grid gap-1 text-sm font-medium text-slate-700">
+          File
+          <input name="file" type="file" required className="h-10 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm" />
+        </label>
+        <div className="md:col-span-3">
+          <Submit>Upload Company Document</Submit>
+        </div>
+      </form>
+      <form action={skipCompanyDocumentsAction} className="grid gap-3 rounded-xl border border-amber-100 bg-amber-50 p-4 md:grid-cols-[1fr_auto] md:items-end">
+        <label className="grid gap-1 text-sm font-medium text-slate-700">
+          Defer documents for
+          <select name="company_id" className="h-10 rounded-xl border border-amber-200 bg-white px-3 text-sm">
+            {companies.map((company) => (
+              <option key={String(company.id)} value={String(company.id)}>
+                {String(company.company_name ?? "Company")}
+              </option>
+            ))}
+          </select>
+        </label>
+        <Submit>Skip documents for now</Submit>
+      </form>
+    </div>
   );
 }
 
@@ -751,6 +767,16 @@ function EmployeeSelfOnboarding({ data }: { data: Row }) {
           {!formLocked ? (
             <div className="md:col-span-2 flex flex-wrap items-center gap-3">
               <Submit>Save Current Step</Submit>
+              {employeeSteps[activeStep] === "Documents" ? (
+                <button
+                  type="submit"
+                  name="skip_documents"
+                  value="1"
+                  className="h-10 rounded-xl border border-amber-200 bg-amber-50 px-4 text-sm font-semibold text-amber-800 transition hover:bg-amber-100"
+                >
+                  Skip documents for now
+                </button>
+              ) : null}
               <button
                 type="button"
                 onClick={saveAndNext}
