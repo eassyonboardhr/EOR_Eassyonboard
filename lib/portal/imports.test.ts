@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 const fromMock = vi.fn();
 
