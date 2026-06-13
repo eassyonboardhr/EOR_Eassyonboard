@@ -15,6 +15,12 @@ vi.mock("next/navigation", () => ({
 
 function createSessionSupabaseMock({
   invitedEmployee = null as { id: string; employer_id: string } | null,
+  activeEmployer = {
+    id: "employer_1",
+    name: "Acme India",
+    contact_email: "invitee@example.com",
+    status: "active",
+  } as { id: string; name: string; contact_email: string; status: string } | null,
 } = {}) {
   const inserts: Array<{ table: string; payload: Record<string, unknown> }> = [];
   const updates: Array<{ table: string; payload: Record<string, unknown> }> = [];
@@ -31,12 +37,7 @@ function createSessionSupabaseMock({
 
         if (name === "employers") {
           return {
-            data: {
-              id: "employer_1",
-              name: "Acme India",
-              contact_email: "invitee@example.com",
-              status: "active",
-            },
+            data: activeEmployer,
             error: null,
           };
         }
@@ -44,7 +45,15 @@ function createSessionSupabaseMock({
         return { data: null, error: null };
       }),
       single: vi.fn(async () => ({
-        data: {
+        data: inserts.at(-1)?.table === name ? {
+          id: "portal_user_1",
+          clerk_user_id: "clerk_invitee",
+          email: String(inserts.at(-1)?.payload.email ?? "invitee@example.com"),
+          full_name: "Invitee",
+          role: inserts.at(-1)?.payload.role,
+          status: inserts.at(-1)?.payload.status,
+          employer_id: inserts.at(-1)?.payload.employer_id ?? null,
+        } : {
           id: "portal_user_1",
           clerk_user_id: "clerk_invitee",
           email: "invitee@example.com",
@@ -83,6 +92,7 @@ beforeEach(() => {
     fullName: "Invitee",
     firstName: "Invitee",
     lastName: null,
+    publicMetadata: {},
     primaryEmailAddress: {
       emailAddress: "invitee@example.com",
     },
@@ -132,6 +142,40 @@ describe("portal session employer invitation bootstrap", () => {
       payload: expect.objectContaining({
         invite_accepted_at: expect.any(String),
         onboarding_started_at: expect.any(String),
+      }),
+    });
+  });
+
+  test("links imported pending employer invite from Clerk metadata", async () => {
+    currentUser.mockResolvedValue({
+      fullName: "Imported Admin",
+      firstName: "Imported",
+      lastName: "Admin",
+      publicMetadata: {
+        portalRole: "employer_admin",
+        employerId: "employer_imported_1",
+        source: "invoice_generator_import",
+      },
+      primaryEmailAddress: {
+        emailAddress: "imported@example.com",
+      },
+    });
+    const supabase = createSessionSupabaseMock({ activeEmployer: null });
+    getSupabaseAdmin.mockReturnValue(supabase.client);
+    const { getPortalSession } = await import("@/lib/portal/session");
+
+    const session = await getPortalSession();
+
+    expect(session.user.role).toBe("employer_admin");
+    expect(session.user.status).toBe("active");
+    expect(session.user.employer_id).toBe("employer_imported_1");
+    expect(supabase.inserts).toContainEqual({
+      table: "portal_users",
+      payload: expect.objectContaining({
+        email: "imported@example.com",
+        role: "employer_admin",
+        status: "active",
+        employer_id: "employer_imported_1",
       }),
     });
   });

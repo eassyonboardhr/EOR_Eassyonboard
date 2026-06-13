@@ -26,6 +26,16 @@ function displayName(user: Awaited<ReturnType<typeof currentUser>>) {
   );
 }
 
+function invitationMetadata(user: Awaited<ReturnType<typeof currentUser>>) {
+  const metadata = user?.publicMetadata ?? {};
+  return {
+    portalRole: typeof metadata.portalRole === "string" ? metadata.portalRole : null,
+    employerId: typeof metadata.employerId === "string" ? metadata.employerId : null,
+    employeeId: typeof metadata.employeeId === "string" ? metadata.employeeId : null,
+    source: typeof metadata.source === "string" ? metadata.source : null,
+  };
+}
+
 async function ensureLeadRecord(portalUser: PortalUser, email: string, name: string | null) {
   const supabase = getSupabaseAdmin();
   const { data: existingLead } = await supabase
@@ -113,13 +123,20 @@ export async function getPortalSession(): Promise<PortalSession> {
     return { clerkUserId: userId, email, user: portalUser };
   }
 
+  const invite = invitationMetadata(clerkUser);
   const { data: invitedEmployee } = await supabase
     .from("employees")
     .select("id, employer_id")
     .eq("email", email.toLowerCase())
     .is("portal_user_id", null)
     .maybeSingle();
-  const invitedEmployer = invitedEmployee ? null : await findActiveEmployerByEmail(email);
+  const importedEmployerInvite =
+    invite.portalRole === "employer_admin" && invite.employerId && invite.source === "invoice_generator_import"
+      ? { id: invite.employerId }
+      : null;
+  const invitedEmployer = invitedEmployee
+    ? null
+    : importedEmployerInvite ?? await findActiveEmployerByEmail(email);
 
   const bootstrapRole: PortalRole = isAdminEmail(email)
     ? "super_admin"
