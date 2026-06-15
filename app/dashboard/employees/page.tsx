@@ -9,8 +9,10 @@ import {
   keepEmployeeActiveAction,
 } from "@/lib/portal/actions/deactivation";
 import { getEmployeeDirectoryData } from "@/lib/portal/directory";
+import { getDirectoryRouteRedirect } from "@/lib/portal/directory-route-policy";
 import { isPlatformAdmin, requirePortalRole } from "@/lib/portal/session";
 import { EmptyState, Panel, PortalShell, StatusBadge, SubmitButton, TextArea, formatDate } from "@/components/portal/ui";
+import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
@@ -44,6 +46,11 @@ export default async function EmployeesDirectoryPage({
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const session = await requirePortalRole(["super_admin", "admin", "employer_admin", "employee"]);
+  const redirectHref = getDirectoryRouteRedirect(session.user.role, "employees");
+  if (redirectHref) {
+    redirect(redirectHref);
+  }
+
   const params = searchParams ? await searchParams : {};
   const requestedTab = Array.isArray(params.tab) ? params.tab[0] : params.tab;
   const activeTab = tabs.some(([value]) => value === requestedTab) ? requestedTab ?? "directory" : "directory";

@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "vitest run --testTimeout=20000"
+    "test": "vitest run --testTimeout=20000",
+    "demo:setup": "node scripts/setup-demo-data.mjs"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.4.2",
