@@ -38,14 +38,23 @@ export async function getNoticesCenterData(
 
   if (error) throw new Error(error.message);
 
+  const baseRecipients = recipients ?? [];
+  const tabCounts = {
+    all: baseRecipients.length,
+    unread: baseRecipients.filter((recipient) => !recipient.read_at).length,
+    acknowledgement: baseRecipients.filter(
+      (recipient) => !recipient.acknowledged_at && recipient.notices?.requires_acknowledgement,
+    ).length,
+  };
   const filteredRecipients =
     category && category !== "all"
-      ? (recipients ?? []).filter((recipient) => recipient.notices?.category === category)
-      : recipients ?? [];
+      ? baseRecipients.filter((recipient) => recipient.notices?.category === category)
+      : baseRecipients;
 
   return {
     tab: tab ?? "all",
     category: category ?? "all",
+    tabCounts,
     recipients: tab === "acknowledgement"
       ? filteredRecipients.filter((recipient) => !recipient.acknowledged_at && recipient.notices?.requires_acknowledgement)
       : filteredRecipients,

@@ -69,6 +69,7 @@ export async function submitResignationAction(formData: FormData) {
     .eq("id", employee.id);
 
   await writeAudit(session.user, "submit_resignation", "resignation", data.id);
+  revalidatePath("/dashboard");
   revalidatePath("/dashboard/employee");
   revalidatePath("/dashboard/resignations");
 }
@@ -89,6 +90,7 @@ export async function forwardResignationAction(formData: FormData) {
     .eq("status", "submitted_to_admin");
 
   await writeAudit(session.user, "forward_resignation", "resignation", resignationId);
+  revalidatePath("/dashboard");
   revalidatePath("/dashboard/admin");
   revalidatePath("/dashboard/resignations");
 }
@@ -181,6 +183,7 @@ export async function employerAcceptResignationAction(formData: FormData) {
     notice_period_days: noticePeriodDays,
     last_working_day: lastWorkingDay,
   });
+  revalidatePath("/dashboard");
   revalidatePath("/dashboard/employer");
   revalidatePath("/dashboard/resignations");
   revalidatePath("/dashboard/employee/leaves");
@@ -220,6 +223,7 @@ export async function employerRejectResignationAction(formData: FormData) {
     .eq("id", resignation.employee_id);
 
   await writeAudit(session.user, "reject_resignation_by_employer", "resignation", resignationId);
+  revalidatePath("/dashboard");
   revalidatePath("/dashboard/employer");
   revalidatePath("/dashboard/resignations");
 }
@@ -263,6 +267,7 @@ export async function decideResignationAction(formData: FormData) {
   }
 
   await writeAudit(session.user, `${decision}_resignation`, "resignation", resignationId);
+  revalidatePath("/dashboard");
   revalidatePath("/dashboard/admin");
   revalidatePath("/dashboard/resignations");
   revalidatePath("/dashboard/employee/leaves");
@@ -318,6 +323,7 @@ export async function requestOffboardingAction(formData: FormData) {
   }
 
   await writeAudit(session.user, "request_offboarding", "offboarding_case", data.id);
+  revalidatePath("/dashboard");
   revalidatePath("/dashboard/admin");
   revalidatePath("/dashboard/employer");
   revalidatePath("/dashboard/offboarding");
@@ -339,6 +345,7 @@ export async function approveOffboardingAction(formData: FormData) {
     .eq("id", offboardingId);
 
   await writeAudit(session.user, "approve_offboarding", "offboarding_case", offboardingId);
+  revalidatePath("/dashboard");
   revalidatePath("/dashboard/admin");
   revalidatePath("/dashboard/offboarding");
 }
@@ -369,6 +376,7 @@ export async function initiateOffboardingAction(formData: FormData) {
     .eq("id", offboarding.employee_id);
 
   await writeAudit(session.user, "initiate_offboarding", "offboarding_case", offboardingId);
+  revalidatePath("/dashboard");
   revalidatePath("/dashboard/offboarding");
 }
 
@@ -417,6 +425,7 @@ export async function completeOffboardingAction(formData: FormData) {
   });
 
   await writeAudit(session.user, "complete_offboarding", "offboarding_case", offboardingId);
+  revalidatePath("/dashboard");
   revalidatePath("/dashboard/offboarding");
 }
 
@@ -449,5 +458,6 @@ export async function confirmOffboardingAccessDeactivationAction(formData: FormD
     .eq("id", offboardingId);
 
   await writeAudit(session.user, "confirm_offboarding_access_deactivation", "offboarding_case", offboardingId);
+  revalidatePath("/dashboard");
   revalidatePath("/dashboard/offboarding");
 }

@@ -49,6 +49,7 @@ export async function createMessageThreadAction(formData: FormData) {
   });
 
   await writeAudit(session.user, "create_message_thread", "message_thread", thread.id, { recipient_count: recipientIds.length });
+  revalidatePath("/dashboard");
   revalidatePath("/dashboard/messages");
 }
 
@@ -74,6 +75,7 @@ export async function replyMessageThreadAction(formData: FormData) {
   await from(supabase, "message_threads").update({ updated_at: new Date().toISOString() }).eq("id", threadId);
   await from(supabase, "message_participants").update({ last_read_at: new Date().toISOString() }).eq("thread_id", threadId).eq("portal_user_id", session.user.id);
   await writeAudit(session.user, "reply_message_thread", "message_thread", threadId);
+  revalidatePath("/dashboard");
   revalidatePath("/dashboard/messages");
 }
 
@@ -105,5 +107,6 @@ export async function updateMessageThreadStateAction(formData: FormData) {
   if (!participant) throw new Error("You cannot update this thread.");
 
   await writeAudit(session.user, `message_thread_${action}`, "message_thread", threadId);
+  revalidatePath("/dashboard");
   revalidatePath("/dashboard/messages");
 }

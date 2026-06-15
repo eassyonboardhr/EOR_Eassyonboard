@@ -150,6 +150,7 @@ export async function sendNoticeAction(formData: FormData) {
   revalidatePath("/dashboard/admin");
   revalidatePath("/dashboard/employer");
   revalidatePath("/dashboard/employee");
+  revalidatePath("/dashboard");
   revalidatePath("/dashboard/notices");
 }
 
@@ -213,6 +214,7 @@ export async function sendTargetedNoticeAction(formData: FormData) {
   revalidatePath("/dashboard/admin");
   revalidatePath("/dashboard/employer");
   revalidatePath("/dashboard/employee");
+  revalidatePath("/dashboard");
   revalidatePath("/dashboard/notices");
 }
 
@@ -235,5 +237,6 @@ export async function markNoticeReadAction(formData: FormData) {
   revalidatePath("/dashboard/employee");
   revalidatePath("/dashboard/employer");
   revalidatePath("/dashboard/admin");
+  revalidatePath("/dashboard");
   revalidatePath("/dashboard/notices");
 }

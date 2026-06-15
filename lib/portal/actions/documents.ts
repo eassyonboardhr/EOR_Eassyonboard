@@ -49,7 +49,9 @@ export async function uploadServiceAgreementAction(formData: FormData) {
 
   await createEmployerNotice(employerId, "Service agreement uploaded", `A service agreement is ready for review: ${title}`, "/dashboard/documents");
   await writeAudit(session.user, "upload_service_agreement", "service_agreement", agreement.id);
+  revalidatePath("/dashboard");
   revalidatePath("/dashboard/documents");
+  revalidatePath("/dashboard/notices");
 }
 
 export async function reviewServiceAgreementAction(formData: FormData) {
@@ -76,6 +78,7 @@ export async function reviewServiceAgreementAction(formData: FormData) {
     })
     .eq("id", agreementId);
   await writeAudit(session.user, `review_service_agreement_${status}`, "service_agreement", agreementId);
+  revalidatePath("/dashboard");
   revalidatePath("/dashboard/documents");
 }
 

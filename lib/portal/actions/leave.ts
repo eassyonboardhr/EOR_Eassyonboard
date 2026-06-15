@@ -41,6 +41,7 @@ function isPaidLeaveType(value: string): value is PaidLeaveType {
 }
 
 function revalidateLeavePaths() {
+  revalidatePath("/dashboard");
   revalidatePath("/dashboard/admin");
   revalidatePath("/dashboard/admin/leaves");
   revalidatePath("/dashboard/employer");

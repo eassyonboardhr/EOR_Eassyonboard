@@ -3,7 +3,7 @@ import { recordEmployeeDocumentAction } from "@/lib/portal/actions/global-onboar
 import { reviewServiceAgreementAction, uploadServiceAgreementAction } from "@/lib/portal/actions/documents";
 import { getDocumentsData } from "@/lib/portal/documents";
 import { isPlatformAdmin, requirePortalRole } from "@/lib/portal/session";
-import { EmptyState, Panel, PortalShell, StatusBadge, SubmitButton, TextArea, TextInput, formatDate } from "@/components/portal/ui";
+import { EmptyState, Panel, PortalShell, StatusBadge, SubmitButton, TextArea, TextInput, formatDate, formatNotificationBadge } from "@/components/portal/ui";
 
 export default async function DocumentsPage({
   searchParams,
@@ -14,6 +14,12 @@ export default async function DocumentsPage({
   const params = await searchParams;
   const data = await getDocumentsData(session, params);
   const admin = isPlatformAdmin(session.user.role);
+  const employeeDocumentActionCount = data.employeeDocuments.filter((row: any) =>
+    session.user.role === "employee"
+      ? row.verification_status === "Rejected"
+      : row.verification_status === "Pending",
+  ).length;
+  const employeeDocumentBadge = formatNotificationBadge(employeeDocumentActionCount);
 
   return (
     <PortalShell session={session} title="Documents" subtitle="Review employee documents, company files, templates, and service agreements." wide>
@@ -80,7 +86,7 @@ export default async function DocumentsPage({
           <Panel title="Service agreements">
             <DocumentRows rows={data.serviceAgreements} serviceActions={session.user.role === "employer_admin" || admin} />
           </Panel>
-          <Panel title="Employee documents">
+          <Panel title={`Employee documents${employeeDocumentBadge ? ` (${employeeDocumentBadge})` : ""}`}>
             <DocumentRows rows={data.employeeDocuments} />
           </Panel>
           <Panel title="Company documents">

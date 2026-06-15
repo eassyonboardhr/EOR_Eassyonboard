@@ -86,6 +86,7 @@ export async function createEmployeeRequestAction(formData: FormData) {
   }
 
   await writeAudit(session.user, "create_employee_request", "employee_request", data.id);
+  revalidatePath("/dashboard");
   revalidatePath("/dashboard/employer");
 }
 
@@ -226,6 +227,7 @@ export async function approveEmployeeRequestAction(formData: FormData) {
     employee_id: employee.id,
     calculated_monthly_salary: monthlySalary,
   });
+  revalidatePath("/dashboard");
   revalidatePath("/dashboard/admin");
   revalidatePath("/dashboard/employees");
   revalidatePath("/dashboard/onboarding");
@@ -288,6 +290,7 @@ export async function resendEmployeeInviteAction(formData: FormData) {
     throw error;
   }
 
+  revalidatePath("/dashboard");
   revalidatePath("/dashboard/admin");
   revalidatePath("/dashboard/employees");
   revalidatePath("/dashboard/onboarding");
@@ -310,6 +313,7 @@ export async function rejectEmployeeRequestAction(formData: FormData) {
     .eq("status", "pending");
 
   await writeAudit(session.user, "reject_employee_request", "employee_request", requestId);
+  revalidatePath("/dashboard");
   revalidatePath("/dashboard/admin");
   revalidatePath("/dashboard/employees");
   revalidatePath("/dashboard/onboarding");

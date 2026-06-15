@@ -1,18 +1,21 @@
 import Link from "next/link";
 import { UserButton } from "@clerk/nextjs";
-import { getUnreadNoticeCount } from "@/lib/portal/notices";
-import { getUnreadMessageCount } from "@/lib/portal/messages";
+import {
+  getPortalNotificationCounts,
+  type PortalNotificationCounts,
+} from "@/lib/portal/notification-counts";
 import { getCommandPaletteItems, getSettingsData } from "@/lib/portal/profile";
 import { PendingSubmitButton } from "@/components/portal/pending-submit-button";
 import { RouteProgress } from "@/components/portal/route-progress";
 import { ShellControls } from "@/components/portal/shell-controls";
 import type { PortalCounts, PortalSession } from "@/lib/portal/types";
 
-type NavItem = {
+export type NavItem = {
   label: string;
   icon: string;
   href: string;
   badge?: string;
+  badgeKey?: keyof PortalNotificationCounts;
 };
 
 const navByRole = {
@@ -22,21 +25,19 @@ const navByRole = {
   employee: "/dashboard/employee",
 };
 
-function navSections(session: PortalSession, unreadNotices = 0, unreadMessages = 0): NavItem[] {
-  const noticeBadge = unreadNotices > 0 ? String(Math.min(unreadNotices, 99)) : undefined;
-  const messageBadge = unreadMessages > 0 ? String(Math.min(unreadMessages, 99)) : undefined;
-
+function navSections(session: PortalSession): NavItem[] {
   if (session.user.role === "employee") {
     return [
       { label: "Dashboard", icon: "D", href: dashboardHref(session) },
       { label: "Attendance", icon: "A", href: "/dashboard/attendance" },
-      { label: "Leaves", icon: "L", href: "/dashboard/employee/leaves" },
-      { label: "Documents", icon: "DOC", href: "/dashboard/documents" },
+      { label: "Leaves", icon: "L", href: "/dashboard/employee/leaves", badgeKey: "leaves" },
+      { label: "Documents", icon: "DOC", href: "/dashboard/documents", badgeKey: "documents" },
       { label: "Finances", icon: "F", href: "/dashboard/finances" },
-      { label: "Messages", icon: "M", href: "/dashboard/messages", badge: messageBadge },
-      { label: "Notices", icon: "N", href: "/dashboard/notices", badge: noticeBadge },
-      { label: "Resignations", icon: "R", href: "/dashboard/resignations" },
-      { label: "Offboarding", icon: "O", href: "/dashboard/offboarding" },
+      { label: "Messages", icon: "M", href: "/dashboard/messages", badgeKey: "messages" },
+      { label: "Notices", icon: "N", href: "/dashboard/notices", badgeKey: "notices" },
+      { label: "Onboarding", icon: "ON", href: "/dashboard/onboarding", badgeKey: "onboarding" },
+      { label: "Resignations", icon: "R", href: "/dashboard/resignations", badgeKey: "resignations" },
+      { label: "Offboarding", icon: "O", href: "/dashboard/offboarding", badgeKey: "offboarding" },
       { label: "Profile", icon: "P", href: "/dashboard/profile" },
       { label: "Settings", icon: "S", href: "/dashboard/settings" },
     ];
@@ -48,14 +49,14 @@ function navSections(session: PortalSession, unreadNotices = 0, unreadMessages =
       { label: "Employees", icon: "EE", href: "/dashboard/employees" },
       { label: "Teams", icon: "TM", href: "/dashboard/employer/teams" },
       { label: "Worktree", icon: "WT", href: "/dashboard/worktree" },
-      { label: "Leaves", icon: "L", href: "/dashboard/employer/leaves" },
-      { label: "Documents", icon: "DOC", href: "/dashboard/documents" },
+      { label: "Leaves", icon: "L", href: "/dashboard/employer/leaves", badgeKey: "leaves" },
+      { label: "Documents", icon: "DOC", href: "/dashboard/documents", badgeKey: "documents" },
       { label: "Finances", icon: "F", href: "/dashboard/finances" },
-      { label: "Messages", icon: "M", href: "/dashboard/messages", badge: messageBadge },
-      { label: "Notices", icon: "N", href: "/dashboard/notices", badge: noticeBadge },
-      { label: "Onboarding", icon: "ON", href: "/dashboard/onboarding" },
-      { label: "Resignations", icon: "R", href: "/dashboard/resignations" },
-      { label: "Offboarding", icon: "O", href: "/dashboard/offboarding" },
+      { label: "Messages", icon: "M", href: "/dashboard/messages", badgeKey: "messages" },
+      { label: "Notices", icon: "N", href: "/dashboard/notices", badgeKey: "notices" },
+      { label: "Onboarding", icon: "ON", href: "/dashboard/onboarding", badgeKey: "onboarding" },
+      { label: "Resignations", icon: "R", href: "/dashboard/resignations", badgeKey: "resignations" },
+      { label: "Offboarding", icon: "O", href: "/dashboard/offboarding", badgeKey: "offboarding" },
       { label: "Reports", icon: "R", href: "/dashboard/reports" },
       { label: "Profile", icon: "P", href: "/dashboard/profile" },
       { label: "Settings", icon: "S", href: "/dashboard/settings" },
@@ -64,22 +65,34 @@ function navSections(session: PortalSession, unreadNotices = 0, unreadMessages =
 
   return [
     { label: "Dashboard", icon: "D", href: dashboardHref(session) },
-    { label: "Employers", icon: "ER", href: "/dashboard/employers" },
-    { label: "Employees", icon: "EE", href: "/dashboard/employees" },
+    { label: "Employers", icon: "ER", href: "/dashboard/employers", badgeKey: "employers" },
+    { label: "Employees", icon: "EE", href: "/dashboard/employees", badgeKey: "employees" },
     { label: "Imports", icon: "IM", href: "/dashboard/imports" },
     { label: "Worktree", icon: "WT", href: "/dashboard/worktree" },
-    { label: "Leaves", icon: "L", href: "/dashboard/admin/leaves" },
-    { label: "Documents", icon: "DOC", href: "/dashboard/documents" },
+    { label: "Leaves", icon: "L", href: "/dashboard/admin/leaves", badgeKey: "leaves" },
+    { label: "Documents", icon: "DOC", href: "/dashboard/documents", badgeKey: "documents" },
     { label: "Finances", icon: "F", href: "/dashboard/finances" },
-    { label: "Messages", icon: "M", href: "/dashboard/messages", badge: messageBadge },
-    { label: "Notices", icon: "N", href: "/dashboard/notices", badge: noticeBadge },
-    { label: "Onboarding", icon: "ON", href: "/dashboard/onboarding" },
-    { label: "Resignations", icon: "R", href: "/dashboard/resignations" },
-    { label: "Offboarding", icon: "O", href: "/dashboard/offboarding" },
+    { label: "Messages", icon: "M", href: "/dashboard/messages", badgeKey: "messages" },
+    { label: "Notices", icon: "N", href: "/dashboard/notices", badgeKey: "notices" },
+    { label: "Onboarding", icon: "ON", href: "/dashboard/onboarding", badgeKey: "onboarding" },
+    { label: "Resignations", icon: "R", href: "/dashboard/resignations", badgeKey: "resignations" },
+    { label: "Offboarding", icon: "O", href: "/dashboard/offboarding", badgeKey: "offboarding" },
     { label: "Reports", icon: "R", href: "/dashboard/reports" },
     { label: "Profile", icon: "P", href: "/dashboard/profile" },
     { label: "Settings", icon: "S", href: "/dashboard/settings" },
   ];
+}
+
+export function formatNotificationBadge(count?: number): string | undefined {
+  if (!count || count <= 0) return undefined;
+  return count >= 100 ? "99+" : String(count);
+}
+
+export function resolveNavBadges(items: NavItem[], counts: PortalNotificationCounts): NavItem[] {
+  return items.map((item) => ({
+    ...item,
+    badge: item.badge ?? (item.badgeKey ? formatNotificationBadge(counts[item.badgeKey]) : undefined),
+  }));
 }
 
 function dashboardHref(session: PortalSession) {
@@ -102,13 +115,13 @@ export async function PortalShell({
   const homeHref = dashboardHref(session);
   const activeTitle = title.toLowerCase();
   const userName = session.user.full_name ?? session.email;
-  const [unreadNotices, unreadMessages, searchItems, settings] = await Promise.all([
-    getUnreadNoticeCount(session),
-    getUnreadMessageCount(session),
+  const [notificationCounts, searchItems, settings] = await Promise.all([
+    getPortalNotificationCounts(session),
     getCommandPaletteItems(session),
     getSettingsData(session),
   ]);
-  const navigation = navSections(session, unreadNotices, unreadMessages);
+  const navigation = resolveNavBadges(navSections(session), notificationCounts);
+  const noticeHeaderBadge = formatNotificationBadge(notificationCounts.notices);
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-950 dark:bg-slate-950 dark:text-slate-100 lg:grid lg:grid-cols-[236px_1fr]">
@@ -177,9 +190,9 @@ export async function PortalShell({
               <ShellControls items={searchItems} initialTheme={settings.user?.theme_preference} />
               <Link href="/dashboard/notices" className="relative flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800" aria-label="Notices">
                 N
-                {unreadNotices > 0 ? (
+                {noticeHeaderBadge ? (
                   <span className="absolute right-1 top-1 rounded-full bg-rose-600 px-1 text-[9px] font-bold text-white">
-                    {Math.min(unreadNotices, 99)}
+                    {noticeHeaderBadge}
                   </span>
                 ) : null}
               </Link>

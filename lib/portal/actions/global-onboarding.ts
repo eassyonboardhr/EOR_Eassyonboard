@@ -584,6 +584,7 @@ export async function saveEmployeeOnboardingStepAction(formData: FormData) {
     status: "Draft",
   }, { onConflict: "employee_id" });
   await writeAudit(session.user, "save_employee_onboarding_step", "employee", employee.id, { step });
+  revalidatePath("/dashboard");
   revalidatePath("/dashboard/onboarding");
 }
 
@@ -655,6 +656,7 @@ export async function saveEmployeeSelfOnboardingAction() {
   }, { onConflict: "employee_id" });
 
   await writeAudit(session.user, "save_employee_self_onboarding", "employee", employee.id);
+  revalidatePath("/dashboard");
   revalidatePath("/dashboard/onboarding");
 }
 
@@ -741,6 +743,7 @@ export async function reviewEmployeeOnboardingAction(formData: FormData) {
   }, { onConflict: "employee_id" });
 
   await writeAudit(session.user, `review_employee_onboarding_${decision}`, "employee", employeeId);
+  revalidatePath("/dashboard");
   revalidatePath("/dashboard/onboarding");
   revalidatePath("/dashboard/employer");
   revalidatePath("/dashboard/worktree");
@@ -829,7 +832,10 @@ export async function reviewEmployeeDocumentAction(formData: FormData) {
   }
 
   await writeAudit(session.user, `review_employee_document_${decision}`, "employee_document", documentId);
+  revalidatePath("/dashboard");
   revalidatePath("/dashboard/onboarding");
+  revalidatePath("/dashboard/documents");
+  revalidatePath("/dashboard/notices");
   revalidatePath("/dashboard/worktree");
 }
 
@@ -861,6 +867,7 @@ export async function saveEmployeeEmployerSetupAction(formData: FormData) {
     .eq("id", employeeId);
 
   await writeAudit(session.user, "save_employee_employer_setup", "employee", employeeId);
+  revalidatePath("/dashboard");
   revalidatePath("/dashboard/onboarding");
   revalidatePath("/dashboard/worktree");
 }
@@ -945,7 +952,9 @@ export async function uploadCompanyDocumentAction(formData: FormData) {
 
   if (error || !data) throw new Error(error?.message ?? "Could not record company document.");
   await writeAudit(session.user, "upload_company_document", "client_document", data.id);
+  revalidatePath("/dashboard");
   revalidatePath("/dashboard/onboarding");
+  revalidatePath("/dashboard/documents");
   revalidatePath("/dashboard/worktree");
 }
 
@@ -958,6 +967,7 @@ export async function skipCompanyDocumentsAction(formData: FormData) {
     source: "company_onboarding",
   });
 
+  revalidatePath("/dashboard");
   revalidatePath("/dashboard/onboarding");
   revalidatePath("/dashboard/documents");
 }
@@ -1022,6 +1032,7 @@ export async function uploadContractTemplateAction(formData: FormData) {
 
   if (error || !data) throw new Error(error?.message ?? "Could not save template.");
   await writeAudit(session.user, "upload_contract_template", "contract_template", data.id);
+  revalidatePath("/dashboard");
   revalidatePath("/dashboard/onboarding");
   revalidatePath("/dashboard/worktree");
 }
@@ -1064,5 +1075,7 @@ export async function recordEmployeeDocumentAction(formData: FormData) {
       .eq("id", previous.id);
   }
 
+  revalidatePath("/dashboard");
   revalidatePath("/dashboard/onboarding");
+  revalidatePath("/dashboard/documents");
 }

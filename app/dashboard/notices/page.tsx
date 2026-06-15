@@ -30,10 +30,10 @@ type NoticeRow = {
 };
 
 const tabs = [
-  ["all", "All"],
-  ["unread", "Unread"],
-  ["acknowledgement", "Requires Acknowledgement"],
-];
+  ["all", "All", "all"],
+  ["unread", "Unread", "unread"],
+  ["acknowledgement", "Requires Acknowledgement", "acknowledgement"],
+] as const;
 
 const categories = [
   ["all", "All categories"],
@@ -149,7 +149,9 @@ export default async function NoticesPage({
         ) : null}
 
         <div className="flex gap-2 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
-          {tabs.map(([value, label]) => (
+          {tabs.map(([value, label, countKey]) => {
+            const count = data.tabCounts[countKey];
+            return (
             <Link
               key={value}
               href={`/dashboard/notices?tab=${value}&category=${data.category}`}
@@ -158,8 +160,16 @@ export default async function NoticesPage({
               }`}
             >
               {label}
+              {count > 0 ? (
+                <span className={`ml-2 rounded-full px-1.5 py-0.5 text-[10px] ${
+                  data.tab === value ? "bg-white text-blue-700" : "bg-slate-100 text-slate-700"
+                }`}>
+                  {count > 99 ? "99+" : count}
+                </span>
+              ) : null}
             </Link>
-          ))}
+            );
+          })}
         </div>
 
         <div className="flex gap-2 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
