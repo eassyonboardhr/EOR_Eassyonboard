@@ -33,6 +33,14 @@ beforeEach(() => {
 });
 
 describe("portal finance loaders", () => {
+  test("normalizes Supabase relation embeds that can return one object or an array", async () => {
+    const { normalizeRelationArray } = await import("@/lib/portal/portal-finance");
+
+    expect(normalizeRelationArray(null)).toEqual([]);
+    expect(normalizeRelationArray({ id: "payslip_1" })).toEqual([{ id: "payslip_1" }]);
+    expect(normalizeRelationArray([{ id: "payslip_1" }, { id: "payslip_2" }])).toEqual([{ id: "payslip_1" }, { id: "payslip_2" }]);
+  });
+
   test("employer finance loader reads only employer invoice records and scopes employer id", async () => {
     const calls: string[] = [];
     const eqCalls: Array<{ table: string; column: string; value: unknown }> = [];

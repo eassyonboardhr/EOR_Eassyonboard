@@ -37,6 +37,11 @@ function applyIn(query: any, column: string, values: string[]) {
   return values.length ? query.in(column, values) : query;
 }
 
+export function normalizeRelationArray<T>(value: T | T[] | null | undefined): T[] {
+  if (!value) return [];
+  return Array.isArray(value) ? value : [value];
+}
+
 async function resolveEmployeeIdForSession(sessionUserId: string) {
   const supabase = getSupabaseAdmin();
   const { data: employee } = await supabase
@@ -113,7 +118,7 @@ async function attachAdminPayslipUrls(rows: PortalEmployeePayrollRecord[]) {
     rows.map(async (row) => ({
       ...row,
       portal_payslip_files: await Promise.all(
-        (row.portal_payslip_files ?? []).map(async (payslip) => {
+        normalizeRelationArray(row.portal_payslip_files).map(async (payslip) => {
           const { data } = await supabase.storage.from("payslips").createSignedUrl(payslip.file_path, 60 * 10);
           return { ...payslip, signed_url: data?.signedUrl ?? null };
         }),
