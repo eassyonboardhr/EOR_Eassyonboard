@@ -35,6 +35,10 @@ dev-server*.log
 .agents/
 skills-lock.json
 supabase vercel secreets/
+clerk cred*.txt
+clerk creds*.txt
+clerk credentials*.txt
+invoice generator secrets/
 
 # env files (can opt-in for committing if needed)
 .env*
