@@ -34,7 +34,28 @@ export default async function ImportsPage({
       subtitle="Review Invoice Generator companies, create pending portal onboarding records, and map historical finance data."
       wide
     >
-      <div className="grid gap-5 xl:grid-cols-[420px_minmax(0,1fr)]">
+      <div className="grid gap-5">
+        <Panel
+          title="Finance Reconciliation"
+          description="Review imported invoices, mappings, payments, allocations, cashout, and reconciliation data."
+        >
+          <div className="flex flex-wrap gap-3">
+            <Link
+              href="/dashboard/imports/finance-reconciliation"
+              className="inline-flex h-10 items-center rounded-xl bg-blue-700 px-4 text-sm font-semibold text-white transition hover:bg-blue-800"
+            >
+              Open finance reconciliation
+            </Link>
+            <Link
+              href="/dashboard/imports/finance-reconciliation/mapping"
+              className="inline-flex h-10 items-center rounded-xl border border-blue-200 bg-blue-50 px-4 text-sm font-semibold text-blue-700 transition hover:bg-blue-100 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-200"
+            >
+              Manage finance mapping
+            </Link>
+          </div>
+        </Panel>
+
+        <div className="grid gap-5 xl:grid-cols-[420px_minmax(0,1fr)]">
         <Panel title="Invoice Generator Queue" description="Synced companies stay staged until an admin imports them.">
           <div className="grid gap-3">
             {queue.map((company) => (
@@ -152,6 +173,7 @@ export default async function ImportsPage({
             <EmptyState>Select a company from the queue to review its import details.</EmptyState>
           </Panel>
         )}
+        </div>
       </div>
     </PortalShell>
   );

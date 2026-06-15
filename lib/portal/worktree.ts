@@ -56,6 +56,7 @@ export type WorktreeTeamNode = {
 export type WorktreeModel = {
   employer: WorktreeEmployerNode;
   teams: WorktreeTeamNode[];
+  assignableEmployees: WorktreeEmployeeNode[];
   ungroupedEmployees: WorktreeEmployeeNode[];
 };
 
@@ -176,6 +177,7 @@ export function buildWorktreeModel({
   return {
     employer,
     teams: [...explicitTeams, ...fallbackTeams],
+    assignableEmployees: employees.map((employee) => toEmployeeNode(employee, null, employeeEnrichment.get(employee.id))),
     ungroupedEmployees: [],
   };
 }

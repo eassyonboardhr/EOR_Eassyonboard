@@ -247,7 +247,8 @@ export async function importInvoiceGeneratorCompanyAction(formData: FormData): P
 
   revalidatePath("/dashboard/imports");
   revalidatePath("/dashboard/finances");
-  revalidatePath("/dashboard/finances/mapping");
+  revalidatePath("/dashboard/imports/finance-reconciliation");
+  revalidatePath("/dashboard/imports/finance-reconciliation/mapping");
   revalidatePath("/dashboard/employers");
   revalidatePath("/dashboard/employees");
 

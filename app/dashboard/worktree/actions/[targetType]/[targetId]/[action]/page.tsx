@@ -1,8 +1,7 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { PortalShell } from "@/components/portal/ui";
 import { withScopedEmployeeDocumentUrls } from "@/lib/portal/document-access";
-import { getEmployeeFinanceRolePreview } from "@/lib/portal/finances";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { isPlatformAdmin, requirePortalRole } from "@/lib/portal/session";
 import type { PortalSession } from "@/lib/portal/types";
@@ -11,49 +10,6 @@ type SearchParams = {
   targetType: "employer" | "employee";
   targetId: string;
   action: string;
-};
-
-type FinanceInvoice = {
-  id: string;
-  invoice_number: string | null;
-  month_key: string | null;
-  status: string | null;
-  grand_total_usd_cents: number | string | null;
-};
-
-type FinanceInvoiceMeta = {
-  invoice_number?: string | null;
-  month_key?: string | null;
-  status?: string | null;
-} | null;
-
-type FinanceLineItem = {
-  id: string;
-  employee_name_snapshot?: string | null;
-  billed_total_usd_cents: number | string | null;
-  finance_invoices?: FinanceInvoiceMeta;
-};
-
-type FinanceStatementRow = {
-  id: string;
-  month_key: string | null;
-  dollar_inward_usd_cents: number | string | null;
-  finance_invoices?: FinanceInvoiceMeta;
-};
-
-type FinanceStatementSummary = {
-  id: string;
-  month_key: string | null;
-  effective_dollar_inward_usd_cents: number | string | null;
-};
-
-type FinanceSalaryPayment = {
-  id: string;
-  month_key: string | null;
-  pf_inr_cents: number | string | null;
-  tds_inr_cents: number | string | null;
-  actual_paid_inr_cents: number | string | null;
-  paid_status: boolean | null;
 };
 
 type EmployerLeaveRequest = {
@@ -157,29 +113,6 @@ function ModuleLink({
   );
 }
 
-function money(value: number | string | null | undefined, currency = "USD") {
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency,
-    maximumFractionDigits: 2,
-  }).format(Number(value ?? 0));
-}
-
-function cents(value: number | string | null | undefined, currency = "USD") {
-  return money(Number(value ?? 0) / 100, currency);
-}
-
-function statusLabel(status: string | null | undefined, { showCashout = false } = {}) {
-  if (status === "generated" || status === "sent") return "Raised / Sent";
-  if (status === "received") return "Payment received";
-  if (status === "cashed_out") return showCashout ? "Cashed out" : "Payment received";
-  return status?.replaceAll("_", " ") ?? "Unknown";
-}
-
-function sumCents<T>(rows: T[], selector: (row: T) => number | string | null | undefined) {
-  return rows.reduce((total, row) => total + Number(selector(row) ?? 0), 0);
-}
-
 function employerLifecycleLastWorkingDay(item: EmployerOffboardingCase | EmployerResignation) {
   return "target_last_working_day" in item
     ? item.target_last_working_day
@@ -192,22 +125,14 @@ async function getEmployer(targetId: string) {
   const [
     { data: employer },
     { count: employeesCount },
-    { data: billing },
     { data: company },
     { data: employeeRequests },
     { data: leaveRequests },
     { data: offboardingCases },
     { data: resignations },
-    { data: financeInvoices },
-    { data: financeLineItems },
-    { data: financePayments },
   ] = await Promise.all([
     supabase.from("employers").select("*").eq("id", targetId).single(),
     supabase.from("employees").select("id", { count: "exact", head: true }).eq("employer_id", targetId),
-    supabase
-      .from("employer_billing")
-      .select("monthly_bill_amount, currency")
-      .eq("employer_id", targetId),
     supabase
       .from("client_companies")
       .select("*, client_billing_settings(*), client_employment_defaults(*), client_compliance_settings(*), client_documents(id), contract_templates(id, template_type, template_name, version_number, is_active)")
@@ -239,51 +164,18 @@ async function getEmployer(targetId: string) {
       .eq("employer_id", targetId)
       .order("created_at", { ascending: false })
       .limit(8),
-    supabase
-      .from("finance_invoices")
-      .select("id, invoice_number, month_key, status, grand_total_usd_cents, payment_received_at, due_date, sync_status")
-      .eq("employer_id", targetId)
-      .eq("sync_status", "synced")
-      .order("month_key", { ascending: false })
-      .limit(8),
-    supabase
-      .from("finance_invoice_line_items")
-      .select("id, employee_id, employee_name_snapshot, billed_total_usd_cents, finance_invoices(invoice_number, month_key, status)")
-      .eq("employer_id", targetId)
-      .eq("sync_status", "synced")
-      .order("created_at", { ascending: false })
-      .limit(12),
-    supabase
-      .from("finance_invoice_payments")
-      .select("id, payment_month, payment_date, external_invoice_id")
-      .eq("employer_id", targetId)
-      .order("payment_month", { ascending: false })
-      .limit(8),
   ]);
 
   if (!employer) return null;
 
-  const totals = (billing ?? []).reduce(
-    (acc: Record<string, number>, row: { currency?: string | null; monthly_bill_amount?: number | string | null }) => {
-      const currency = row.currency ?? "USD";
-      acc[currency] = (acc[currency] ?? 0) + Number(row.monthly_bill_amount ?? 0);
-      return acc;
-    },
-    {} as Record<string, number>,
-  );
-
   return {
     employer,
     employeesCount: employeesCount ?? 0,
-    billingTotals: totals,
     company,
     employeeRequests: (employeeRequests ?? []) as EmployerEmployeeRequest[],
     leaveRequests: (leaveRequests ?? []) as EmployerLeaveRequest[],
     offboardingCases: (offboardingCases ?? []) as EmployerOffboardingCase[],
     resignations: (resignations ?? []) as EmployerResignation[],
-    financeInvoices: (financeInvoices ?? []) as FinanceInvoice[],
-    financeLineItems: (financeLineItems ?? []) as FinanceLineItem[],
-    financePayments: financePayments ?? [],
   };
 }
 
@@ -301,10 +193,6 @@ async function getEmployee(targetId: string, session: PortalSession) {
     { data: leaveRequests },
     { data: resignations },
     { data: offboardingCases },
-    { data: financeLineItems },
-    { data: statementRows },
-    { data: statementSummaries },
-    { data: salaryPayments },
   ] = await Promise.all([
     supabase
       .from("employees")
@@ -347,34 +235,6 @@ async function getEmployee(targetId: string, session: PortalSession) {
       .eq("employee_id", targetId)
       .order("created_at", { ascending: false })
       .limit(5),
-    supabase
-      .from("finance_invoice_line_items")
-      .select("id, employee_id, employee_name_snapshot, billed_total_usd_cents, billing_rate_usd_cents, days_worked, sync_status, finance_invoices(invoice_number, month_key, status)")
-      .eq("employee_id", targetId)
-      .eq("sync_status", "synced")
-      .order("created_at", { ascending: false })
-      .limit(12),
-    supabase
-      .from("finance_employee_statement_rows")
-      .select("id, month_key, dollar_inward_usd_cents, onboarding_advance_usd_cents, reimbursement_usd_cents, appraisal_advance_usd_cents, offboarding_deduction_usd_cents, finance_invoices(invoice_number, status)")
-      .eq("employee_id", targetId)
-      .eq("sync_status", "synced")
-      .order("month_key", { ascending: false })
-      .limit(12),
-    supabase
-      .from("finance_employee_statement_summaries")
-      .select("id, month_key, month_label_snapshot, effective_dollar_inward_usd_cents, monthly_dollar_paid_usd_cents")
-      .eq("employee_id", targetId)
-      .eq("sync_status", "synced")
-      .order("month_key", { ascending: false })
-      .limit(12),
-    supabase
-      .from("finance_employee_salary_payments")
-      .select("id, month_key, salary_usd_cents, salary_paid_inr_cents, pf_inr_cents, tds_inr_cents, actual_paid_inr_cents, paid_status, paid_date")
-      .eq("employee_id", targetId)
-      .eq("sync_status", "synced")
-      .order("month_key", { ascending: false })
-      .limit(12),
   ]);
 
   if (!employee) return null;
@@ -390,10 +250,6 @@ async function getEmployee(targetId: string, session: PortalSession) {
     leaveRequests: (leaveRequests ?? []) as EmployeeLeaveRequest[],
     resignations: (resignations ?? []) as EmployeeResignation[],
     offboardingCases: (offboardingCases ?? []) as EmployeeOffboardingCase[],
-    financeLineItems: (financeLineItems ?? []) as FinanceLineItem[],
-    statementRows: (statementRows ?? []) as FinanceStatementRow[],
-    statementSummaries: (statementSummaries ?? []) as FinanceStatementSummary[],
-    salaryPayments: (salaryPayments ?? []) as FinanceSalaryPayment[],
   };
 }
 
@@ -421,6 +277,10 @@ export default async function WorktreeActionPage({
 
     if (!isAdmin && session.user.employer_id !== data.employer.id) {
       throw new Error("You cannot view this employer action.");
+    }
+
+    if (action === "finances") {
+      redirect(`/dashboard/finances?employer=${data.employer.id}`);
     }
 
     return (
@@ -475,82 +335,6 @@ export default async function WorktreeActionPage({
                 <ModuleLink href={isAdmin ? `/dashboard/admin/leaves?employer=${data.employer.id}` : "/dashboard/employer/leaves"} title="Leaves" description="Open the live leave queue scoped to this employer." />
                 <ModuleLink href="/dashboard/worktree" title="Worktree" description="Return to the organization chart and employee relationship view." />
               </div>
-            </div>
-          ) : null}
-
-          {action === "finances" ? (
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-base font-semibold text-slate-950">Synced Finance Summary</h2>
-                  <p className="mt-1 text-sm text-slate-500">Invoice Generator billing and payment status for this employer.</p>
-                </div>
-                <Link href={`/dashboard/finances?employer=${data.employer.id}`} className="rounded-xl border border-blue-200 px-4 py-2 text-sm font-semibold text-blue-700">
-                  Open Finance Page
-                </Link>
-              </div>
-              <div className="mt-4 grid gap-3 md:grid-cols-3">
-                <Field label="Total invoiced" value={cents(sumCents(data.financeInvoices, (row) => row.grand_total_usd_cents))} />
-                <Field label="Pending payment" value={cents(sumCents(data.financeInvoices.filter((row) => row.status === "generated" || row.status === "sent"), (row) => row.grand_total_usd_cents))} />
-                <Field label="Payment received" value={cents(sumCents(data.financeInvoices.filter((row) => row.status === "received"), (row) => row.grand_total_usd_cents))} />
-                <Field label="Cashed out" value={cents(sumCents(data.financeInvoices.filter((row) => row.status === "cashed_out"), (row) => row.grand_total_usd_cents))} />
-                <Field label="Invoice count" value={data.financeInvoices.length} />
-                <Field label="Payment records" value={data.financePayments.length} />
-              </div>
-              {data.financeInvoices.length > 0 ? (
-                <div className="mt-5 overflow-hidden rounded-xl border border-slate-200">
-                  <table className="min-w-full divide-y divide-slate-200 text-sm">
-                    <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
-                      <tr>
-                        <th className="px-4 py-3">Invoice</th>
-                        <th className="px-4 py-3">Month</th>
-                        <th className="px-4 py-3">Status</th>
-                        <th className="px-4 py-3 text-right">Amount</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 bg-white">
-                      {data.financeInvoices.map((invoice) => (
-                        <tr key={invoice.id}>
-                          <td className="px-4 py-3 font-semibold text-slate-950">{invoice.invoice_number}</td>
-                          <td className="px-4 py-3 text-slate-600">{invoice.month_key}</td>
-                          <td className="px-4 py-3 text-slate-600">{statusLabel(invoice.status, { showCashout: true })}</td>
-                          <td className="px-4 py-3 text-right font-semibold text-slate-950">{cents(invoice.grand_total_usd_cents)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <p className="mt-4 text-sm text-slate-500">No synced invoices found yet. Sync from Invoice Generator, then map the company in Finance Mapping.</p>
-              )}
-              {Object.entries(data.billingTotals).length > 0 ? (
-                <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
-                  <p className="text-sm font-semibold text-slate-950">Current configured monthly billing</p>
-                  <div className="mt-3 grid gap-3 md:grid-cols-3">
-                    {Object.entries(data.billingTotals as Record<string, number>).map(([currency, total]) => (
-                      <Field key={currency} label={currency} value={money(total, currency)} />
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-              {data.financeLineItems.length > 0 ? (
-                <div className="mt-5">
-                  <p className="text-sm font-semibold text-slate-950">Recent employee billing rows</p>
-                  <div className="mt-3 grid gap-3">
-                    {data.financeLineItems.slice(0, 5).map((item) => (
-                      <div key={item.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
-                        <div className="flex flex-wrap items-center justify-between gap-3">
-                          <p className="font-semibold text-slate-950">{item.employee_name_snapshot}</p>
-                          <p className="font-semibold text-slate-950">{cents(item.billed_total_usd_cents)}</p>
-                        </div>
-                        <p className="mt-1 text-xs text-slate-500">
-                          {item.finance_invoices?.invoice_number ?? "Invoice"} · {item.finance_invoices?.month_key ?? "Month not set"} · {statusLabel(item.finance_invoices?.status, { showCashout: true })}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
             </div>
           ) : null}
 
@@ -646,9 +430,10 @@ export default async function WorktreeActionPage({
     throw new Error("You cannot view this employee action.");
   }
 
-  const financePreview = action === "finances"
-    ? await getEmployeeFinanceRolePreview(session, data.employee.id)
-    : null;
+  if (action === "finances") {
+    redirect(`/dashboard/finances?employee=${data.employee.id}`);
+  }
+
   const documentSummary = data.documents.reduce(
     (acc, document) => {
       const status = document.verification_status ?? "Pending";
@@ -820,113 +605,6 @@ export default async function WorktreeActionPage({
                 Open Offboarding
               </Link>
             </div>
-          </div>
-        ) : null}
-
-        {action === "finances" ? (
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h2 className="text-base font-semibold text-slate-950">Finance Role Preview</h2>
-                <p className="mt-1 text-sm text-slate-500">
-                  {isAdmin ? "Admin can see exactly what employer and employee users see, plus allocation controls." : session.user.role === "employer_admin" ? "Employer-safe statement for this employee." : "Your salary statement."}
-                </p>
-              </div>
-              <Link href={`/dashboard/finances?employee=${data.employee.id}`} className="rounded-xl border border-blue-200 px-4 py-2 text-sm font-semibold text-blue-700">
-                Open Finance Page
-              </Link>
-            </div>
-
-            {isAdmin || session.user.role === "employer_admin" ? (
-              <div className="mt-5 overflow-hidden rounded-xl border border-slate-200">
-                <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
-                  <p className="text-sm font-semibold text-slate-950">Employer View Preview</p>
-                  <p className="mt-1 text-xs text-slate-500">Employer-safe invoice statement; salary internals and cashout rates are hidden.</p>
-                </div>
-                <table className="min-w-full divide-y divide-slate-200 text-sm">
-                  <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
-                    <tr>
-                      <th className="px-4 py-3">Month</th>
-                      <th className="px-4 py-3">Invoice</th>
-                      <th className="px-4 py-3">Designation</th>
-                      <th className="px-4 py-3">Status</th>
-                      <th className="px-4 py-3 text-right">Employer billing</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 bg-white">
-                    {(financePreview?.employerView.rows ?? []).map((item) => (
-                      <tr key={item.id}>
-                        <td className="px-4 py-3 text-slate-600">{item.invoiceMonth ?? "Not set"}</td>
-                        <td className="px-4 py-3 font-semibold text-slate-950">{item.invoiceNumber}</td>
-                        <td className="px-4 py-3 text-slate-600">{item.designation ?? item.teamName ?? "Not set"}</td>
-                        <td className="px-4 py-3 text-slate-600">{item.paymentStatus}</td>
-                        <td className="px-4 py-3 text-right font-semibold text-slate-950">{cents(item.amountUsdCents)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {(financePreview?.employerView.rows ?? []).length === 0 ? <p className="p-4 text-sm text-slate-500">No employer-safe statement rows found for this employee.</p> : null}
-              </div>
-            ) : null}
-
-            {isAdmin || session.user.role === "employee" ? (
-              <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <p className="text-sm font-semibold text-slate-950">{isAdmin ? "Employee View Preview" : "My Salary Statement"}</p>
-                <p className="mt-1 text-xs text-slate-500">INR salary components only; employer invoices and cashout rates are hidden.</p>
-                <div className="mt-3 grid gap-3 md:grid-cols-3">
-                  <Field label="Actual paid INR" value={cents(financePreview?.employeeView.totals.actualPaidInrCents ?? 0, "INR")} />
-                  <Field label="PF INR" value={cents(financePreview?.employeeView.totals.pfInrCents ?? 0, "INR")} />
-                  <Field label="TDS INR" value={cents(financePreview?.employeeView.totals.tdsInrCents ?? 0, "INR")} />
-                </div>
-                {(financePreview?.employeeView.rows ?? []).length > 0 ? (
-                  <div className="mt-5 overflow-hidden rounded-xl border border-slate-200 bg-white">
-                    <table className="min-w-full divide-y divide-slate-200 text-sm">
-                      <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
-                        <tr>
-                          <th className="px-4 py-3">Payroll month</th>
-                          <th className="px-4 py-3">Gross INR</th>
-                          <th className="px-4 py-3">PF</th>
-                          <th className="px-4 py-3">TDS</th>
-                          <th className="px-4 py-3">Actual paid</th>
-                          <th className="px-4 py-3">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 bg-white">
-                        {financePreview?.employeeView.rows.slice(0, 8).map((row) => (
-                          <tr key={row.id}>
-                            <td className="px-4 py-3 text-slate-600">{row.payrollMonth ?? "Not set"}</td>
-                            <td className="px-4 py-3">{cents(row.grossInrCents, "INR")}</td>
-                            <td className="px-4 py-3">{cents(row.pfInrCents, "INR")}</td>
-                            <td className="px-4 py-3">{cents(row.tdsInrCents, "INR")}</td>
-                            <td className="px-4 py-3 font-semibold text-slate-950">{cents(row.actualPaidInrCents, "INR")}</td>
-                            <td className="px-4 py-3">{row.paid ? "Paid" : "Pending"}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : (
-                  <p className="mt-4 text-sm text-slate-500">No salary statement rows found for this employee.</p>
-                )}
-              </div>
-            ) : null}
-
-            {isAdmin ? (
-              <div className="mt-6 rounded-xl border border-slate-200 bg-white p-4">
-                <p className="text-sm font-semibold text-slate-950">Admin Reconciliation</p>
-                <p className="mt-1 text-xs text-slate-500">Allocation and cashout details remain admin-only.</p>
-                <div className="mt-3 grid gap-2">
-                  {(financePreview?.adminAllocations ?? []).slice(0, 6).map((allocation) => (
-                    <div key={allocation.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
-                      <span className="font-semibold text-slate-950">{allocation.invoiceNumber}</span>
-                      <span className="text-slate-600">Invoice {allocation.invoiceMonth ?? "not set"} · Paid {allocation.paidMonth ?? "not set"} · Payroll {allocation.payrollMonth ?? "not set"}</span>
-                      <span className="font-semibold text-slate-950">{cents(allocation.allocatedUsdCents)} @ {allocation.cashoutRate ?? "rate not set"}</span>
-                    </div>
-                  ))}
-                  {(financePreview?.adminAllocations ?? []).length === 0 ? <p className="text-sm text-slate-500">No allocations found for this employee yet.</p> : null}
-                </div>
-              </div>
-            ) : null}
           </div>
         ) : null}
       </section>

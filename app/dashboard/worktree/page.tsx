@@ -3,6 +3,11 @@ import { WorktreeClient } from "@/components/worktree/worktree-client";
 import { getWorktreeData } from "@/lib/portal/worktree";
 import { requirePortalRole } from "@/lib/portal/session";
 
+function resolveWorktreeTab(value: string | string[] | undefined) {
+  const tab = Array.isArray(value) ? value[0] : value;
+  return tab === "teams" ? "teams" : "worktree";
+}
+
 export default async function WorktreePage({
   searchParams,
 }: {
@@ -16,6 +21,7 @@ export default async function WorktreePage({
   ]);
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const data = await getWorktreeData(session, resolvedSearchParams);
+  const activeTab = resolveWorktreeTab(resolvedSearchParams.tab);
 
   return (
     <PortalShell
@@ -24,7 +30,7 @@ export default async function WorktreePage({
       subtitle="Visualize employer, team, manager, and employee relationships."
       wide
     >
-      <WorktreeClient data={data} role={session.user.role} />
+      <WorktreeClient data={data} role={session.user.role} activeTab={activeTab} />
     </PortalShell>
   );
 }

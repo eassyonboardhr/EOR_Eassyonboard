@@ -955,24 +955,24 @@ export type Database = {
       }
       employee_onboarding_progress: {
         Row: {
-          completion_percentage: number
           completed_steps: Json | null
+          completion_percentage: number
           current_step: string
           employee_id: string
           id: string
           last_updated: string
         }
         Insert: {
-          completion_percentage?: number
           completed_steps?: Json | null
+          completion_percentage?: number
           current_step?: string
           employee_id: string
           id?: string
           last_updated?: string
         }
         Update: {
-          completion_percentage?: number
           completed_steps?: Json | null
+          completion_percentage?: number
           current_step?: string
           employee_id?: string
           id?: string
@@ -1128,8 +1128,8 @@ export type Database = {
           invite_id: string | null
           invite_sent_at: string | null
           job_title: string | null
-          onboarding_started_at: string | null
           onboarding_notes: string | null
+          onboarding_started_at: string | null
           proposed_start_date: string | null
           requested_by: string | null
           reviewed_at: string | null
@@ -1157,8 +1157,8 @@ export type Database = {
           invite_id?: string | null
           invite_sent_at?: string | null
           job_title?: string | null
-          onboarding_started_at?: string | null
           onboarding_notes?: string | null
+          onboarding_started_at?: string | null
           proposed_start_date?: string | null
           requested_by?: string | null
           reviewed_at?: string | null
@@ -1186,8 +1186,8 @@ export type Database = {
           invite_id?: string | null
           invite_sent_at?: string | null
           job_title?: string | null
-          onboarding_started_at?: string | null
           onboarding_notes?: string | null
+          onboarding_started_at?: string | null
           proposed_start_date?: string | null
           requested_by?: string | null
           reviewed_at?: string | null
@@ -1503,6 +1503,813 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      finance_company_mappings: {
+        Row: {
+          created_at: string
+          employer_id: string | null
+          external_company_id: string
+          external_company_name: string
+          id: string
+          source_key: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          employer_id?: string | null
+          external_company_id: string
+          external_company_name: string
+          id?: string
+          source_key?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          employer_id?: string | null
+          external_company_id?: string
+          external_company_name?: string
+          id?: string
+          source_key?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_company_mappings_employer_id_fkey"
+            columns: ["employer_id"]
+            isOneToOne: false
+            referencedRelation: "employers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_company_mappings_source_key_fkey"
+            columns: ["source_key"]
+            isOneToOne: false
+            referencedRelation: "finance_sync_sources"
+            referencedColumns: ["source_key"]
+          },
+        ]
+      }
+      finance_employee_mappings: {
+        Row: {
+          created_at: string
+          employee_id: string | null
+          employer_id: string | null
+          external_company_id: string
+          external_employee_email: string | null
+          external_employee_id: string
+          external_employee_name: string
+          id: string
+          source_key: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          employee_id?: string | null
+          employer_id?: string | null
+          external_company_id: string
+          external_employee_email?: string | null
+          external_employee_id: string
+          external_employee_name: string
+          id?: string
+          source_key?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          employee_id?: string | null
+          employer_id?: string | null
+          external_company_id?: string
+          external_employee_email?: string | null
+          external_employee_id?: string
+          external_employee_name?: string
+          id?: string
+          source_key?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_employee_mappings_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_employee_mappings_employer_id_fkey"
+            columns: ["employer_id"]
+            isOneToOne: false
+            referencedRelation: "employers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_employee_mappings_source_key_fkey"
+            columns: ["source_key"]
+            isOneToOne: false
+            referencedRelation: "finance_sync_sources"
+            referencedColumns: ["source_key"]
+          },
+        ]
+      }
+      finance_employee_salary_payments: {
+        Row: {
+          actual_paid_inr_cents: number
+          created_at: string
+          employee_id: string | null
+          employer_id: string | null
+          external_company_id: string
+          external_employee_id: string
+          external_salary_payment_id: string
+          id: string
+          month_key: string
+          notes: string | null
+          paid_date: string | null
+          paid_status: boolean
+          paid_usd_inr_rate: number
+          pf_inr_cents: number
+          salary_paid_inr_cents: number
+          salary_usd_cents: number
+          source_key: string
+          sync_status: string
+          tds_inr_cents: number
+          updated_at: string
+        }
+        Insert: {
+          actual_paid_inr_cents?: number
+          created_at?: string
+          employee_id?: string | null
+          employer_id?: string | null
+          external_company_id: string
+          external_employee_id: string
+          external_salary_payment_id: string
+          id?: string
+          month_key: string
+          notes?: string | null
+          paid_date?: string | null
+          paid_status?: boolean
+          paid_usd_inr_rate?: number
+          pf_inr_cents?: number
+          salary_paid_inr_cents?: number
+          salary_usd_cents?: number
+          source_key?: string
+          sync_status?: string
+          tds_inr_cents?: number
+          updated_at?: string
+        }
+        Update: {
+          actual_paid_inr_cents?: number
+          created_at?: string
+          employee_id?: string | null
+          employer_id?: string | null
+          external_company_id?: string
+          external_employee_id?: string
+          external_salary_payment_id?: string
+          id?: string
+          month_key?: string
+          notes?: string | null
+          paid_date?: string | null
+          paid_status?: boolean
+          paid_usd_inr_rate?: number
+          pf_inr_cents?: number
+          salary_paid_inr_cents?: number
+          salary_usd_cents?: number
+          source_key?: string
+          sync_status?: string
+          tds_inr_cents?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_employee_salary_payments_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_employee_salary_payments_employer_id_fkey"
+            columns: ["employer_id"]
+            isOneToOne: false
+            referencedRelation: "employers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_employee_salary_payments_source_key_fkey"
+            columns: ["source_key"]
+            isOneToOne: false
+            referencedRelation: "finance_sync_sources"
+            referencedColumns: ["source_key"]
+          },
+        ]
+      }
+      finance_employee_statement_rows: {
+        Row: {
+          appraisal_advance_usd_cents: number
+          created_at: string
+          dollar_inward_usd_cents: number
+          employee_id: string | null
+          employee_name_snapshot: string
+          external_employee_id: string
+          external_invoice_id: string
+          external_statement_row_id: string
+          id: string
+          invoice_id: string | null
+          invoice_number_snapshot: string
+          month_key: string
+          offboarding_deduction_usd_cents: number
+          onboarding_advance_usd_cents: number
+          reimbursement_labels_text: string
+          reimbursement_usd_cents: number
+          source_key: string
+          sync_status: string
+          updated_at: string
+        }
+        Insert: {
+          appraisal_advance_usd_cents?: number
+          created_at?: string
+          dollar_inward_usd_cents?: number
+          employee_id?: string | null
+          employee_name_snapshot: string
+          external_employee_id: string
+          external_invoice_id: string
+          external_statement_row_id: string
+          id?: string
+          invoice_id?: string | null
+          invoice_number_snapshot: string
+          month_key: string
+          offboarding_deduction_usd_cents?: number
+          onboarding_advance_usd_cents?: number
+          reimbursement_labels_text?: string
+          reimbursement_usd_cents?: number
+          source_key?: string
+          sync_status?: string
+          updated_at?: string
+        }
+        Update: {
+          appraisal_advance_usd_cents?: number
+          created_at?: string
+          dollar_inward_usd_cents?: number
+          employee_id?: string | null
+          employee_name_snapshot?: string
+          external_employee_id?: string
+          external_invoice_id?: string
+          external_statement_row_id?: string
+          id?: string
+          invoice_id?: string | null
+          invoice_number_snapshot?: string
+          month_key?: string
+          offboarding_deduction_usd_cents?: number
+          onboarding_advance_usd_cents?: number
+          reimbursement_labels_text?: string
+          reimbursement_usd_cents?: number
+          source_key?: string
+          sync_status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_employee_statement_rows_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_employee_statement_rows_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "finance_invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_employee_statement_rows_source_key_fkey"
+            columns: ["source_key"]
+            isOneToOne: false
+            referencedRelation: "finance_sync_sources"
+            referencedColumns: ["source_key"]
+          },
+        ]
+      }
+      finance_employee_statement_summaries: {
+        Row: {
+          created_at: string
+          effective_dollar_inward_usd_cents: number
+          employee_id: string | null
+          external_employee_id: string
+          external_statement_summary_id: string
+          id: string
+          month_key: string
+          month_label_snapshot: string
+          monthly_dollar_paid_usd_cents: number
+          source_key: string
+          sync_status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          effective_dollar_inward_usd_cents?: number
+          employee_id?: string | null
+          external_employee_id: string
+          external_statement_summary_id: string
+          id?: string
+          month_key: string
+          month_label_snapshot: string
+          monthly_dollar_paid_usd_cents?: number
+          source_key?: string
+          sync_status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          effective_dollar_inward_usd_cents?: number
+          employee_id?: string | null
+          external_employee_id?: string
+          external_statement_summary_id?: string
+          id?: string
+          month_key?: string
+          month_label_snapshot?: string
+          monthly_dollar_paid_usd_cents?: number
+          source_key?: string
+          sync_status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_employee_statement_summaries_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_employee_statement_summaries_source_key_fkey"
+            columns: ["source_key"]
+            isOneToOne: false
+            referencedRelation: "finance_sync_sources"
+            referencedColumns: ["source_key"]
+          },
+        ]
+      }
+      finance_invoice_line_items: {
+        Row: {
+          billed_total_usd_cents: number
+          billing_rate_usd_cents: number
+          created_at: string
+          days_worked: number | null
+          designation_snapshot: string | null
+          employee_id: string | null
+          employee_name_snapshot: string
+          employer_id: string | null
+          external_employee_id: string
+          external_invoice_id: string
+          external_line_item_id: string
+          hrs_per_week: number | null
+          id: string
+          invoice_id: string
+          payout_monthly_usd_cents_snapshot: number
+          payout_total_usd_cents: number
+          profit_total_usd_cents: number
+          source_key: string
+          sync_status: string
+          team_name_snapshot: string | null
+          updated_at: string
+        }
+        Insert: {
+          billed_total_usd_cents?: number
+          billing_rate_usd_cents?: number
+          created_at?: string
+          days_worked?: number | null
+          designation_snapshot?: string | null
+          employee_id?: string | null
+          employee_name_snapshot: string
+          employer_id?: string | null
+          external_employee_id: string
+          external_invoice_id: string
+          external_line_item_id: string
+          hrs_per_week?: number | null
+          id?: string
+          invoice_id: string
+          payout_monthly_usd_cents_snapshot?: number
+          payout_total_usd_cents?: number
+          profit_total_usd_cents?: number
+          source_key?: string
+          sync_status?: string
+          team_name_snapshot?: string | null
+          updated_at?: string
+        }
+        Update: {
+          billed_total_usd_cents?: number
+          billing_rate_usd_cents?: number
+          created_at?: string
+          days_worked?: number | null
+          designation_snapshot?: string | null
+          employee_id?: string | null
+          employee_name_snapshot?: string
+          employer_id?: string | null
+          external_employee_id?: string
+          external_invoice_id?: string
+          external_line_item_id?: string
+          hrs_per_week?: number | null
+          id?: string
+          invoice_id?: string
+          payout_monthly_usd_cents_snapshot?: number
+          payout_total_usd_cents?: number
+          profit_total_usd_cents?: number
+          source_key?: string
+          sync_status?: string
+          team_name_snapshot?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_invoice_line_items_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_invoice_line_items_employer_id_fkey"
+            columns: ["employer_id"]
+            isOneToOne: false
+            referencedRelation: "employers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_invoice_line_items_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "finance_invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_invoice_line_items_source_key_fkey"
+            columns: ["source_key"]
+            isOneToOne: false
+            referencedRelation: "finance_sync_sources"
+            referencedColumns: ["source_key"]
+          },
+        ]
+      }
+      finance_invoice_payments: {
+        Row: {
+          created_at: string
+          employer_id: string | null
+          external_company_id: string
+          external_invoice_id: string
+          external_payment_id: string
+          id: string
+          invoice_id: string
+          notes: string | null
+          payment_date: string | null
+          payment_month: string
+          source_key: string
+          updated_at: string
+          usd_inr_rate: number
+        }
+        Insert: {
+          created_at?: string
+          employer_id?: string | null
+          external_company_id: string
+          external_invoice_id: string
+          external_payment_id: string
+          id?: string
+          invoice_id: string
+          notes?: string | null
+          payment_date?: string | null
+          payment_month: string
+          source_key?: string
+          updated_at?: string
+          usd_inr_rate?: number
+        }
+        Update: {
+          created_at?: string
+          employer_id?: string | null
+          external_company_id?: string
+          external_invoice_id?: string
+          external_payment_id?: string
+          id?: string
+          invoice_id?: string
+          notes?: string | null
+          payment_date?: string | null
+          payment_month?: string
+          source_key?: string
+          updated_at?: string
+          usd_inr_rate?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_invoice_payments_employer_id_fkey"
+            columns: ["employer_id"]
+            isOneToOne: false
+            referencedRelation: "employers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_invoice_payments_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "finance_invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_invoice_payments_source_key_fkey"
+            columns: ["source_key"]
+            isOneToOne: false
+            referencedRelation: "finance_sync_sources"
+            referencedColumns: ["source_key"]
+          },
+        ]
+      }
+      finance_invoices: {
+        Row: {
+          adjustments_usd_cents: number
+          billing_date: string | null
+          created_at: string
+          due_date: string | null
+          employer_id: string | null
+          external_company_id: string
+          external_invoice_id: string
+          grand_total_usd_cents: number
+          id: string
+          invoice_number: string
+          last_source_status: string | null
+          last_status_synced_at: string | null
+          month: number
+          month_key: string
+          note_text: string | null
+          payment_received_at: string | null
+          payment_received_by: string | null
+          payment_received_notes: string | null
+          pdf_path: string | null
+          source_key: string
+          status: string
+          subtotal_usd_cents: number
+          sync_status: string
+          synced_at: string
+          updated_at: string
+          year: number
+        }
+        Insert: {
+          adjustments_usd_cents?: number
+          billing_date?: string | null
+          created_at?: string
+          due_date?: string | null
+          employer_id?: string | null
+          external_company_id: string
+          external_invoice_id: string
+          grand_total_usd_cents?: number
+          id?: string
+          invoice_number: string
+          last_source_status?: string | null
+          last_status_synced_at?: string | null
+          month: number
+          month_key: string
+          note_text?: string | null
+          payment_received_at?: string | null
+          payment_received_by?: string | null
+          payment_received_notes?: string | null
+          pdf_path?: string | null
+          source_key?: string
+          status: string
+          subtotal_usd_cents?: number
+          sync_status?: string
+          synced_at?: string
+          updated_at?: string
+          year: number
+        }
+        Update: {
+          adjustments_usd_cents?: number
+          billing_date?: string | null
+          created_at?: string
+          due_date?: string | null
+          employer_id?: string | null
+          external_company_id?: string
+          external_invoice_id?: string
+          grand_total_usd_cents?: number
+          id?: string
+          invoice_number?: string
+          last_source_status?: string | null
+          last_status_synced_at?: string | null
+          month?: number
+          month_key?: string
+          note_text?: string | null
+          payment_received_at?: string | null
+          payment_received_by?: string | null
+          payment_received_notes?: string | null
+          pdf_path?: string | null
+          source_key?: string
+          status?: string
+          subtotal_usd_cents?: number
+          sync_status?: string
+          synced_at?: string
+          updated_at?: string
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_invoices_employer_id_fkey"
+            columns: ["employer_id"]
+            isOneToOne: false
+            referencedRelation: "employers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_invoices_payment_received_by_fkey"
+            columns: ["payment_received_by"]
+            isOneToOne: false
+            referencedRelation: "portal_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_invoices_source_key_fkey"
+            columns: ["source_key"]
+            isOneToOne: false
+            referencedRelation: "finance_sync_sources"
+            referencedColumns: ["source_key"]
+          },
+        ]
+      }
+      finance_payroll_allocations: {
+        Row: {
+          allocated_usd_cents: number
+          allocation_source: string
+          cashout_rate: number | null
+          cashout_rate_source: string
+          created_at: string
+          created_by: string | null
+          employee_id: string
+          employer_id: string
+          id: string
+          invoice_id: string | null
+          invoice_month: string | null
+          invoice_payment_id: string | null
+          override_reason: string | null
+          paid_month: string | null
+          payroll_month: string | null
+          salary_payment_id: string | null
+          source_key: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          allocated_usd_cents?: number
+          allocation_source?: string
+          cashout_rate?: number | null
+          cashout_rate_source?: string
+          created_at?: string
+          created_by?: string | null
+          employee_id: string
+          employer_id: string
+          id?: string
+          invoice_id?: string | null
+          invoice_month?: string | null
+          invoice_payment_id?: string | null
+          override_reason?: string | null
+          paid_month?: string | null
+          payroll_month?: string | null
+          salary_payment_id?: string | null
+          source_key?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          allocated_usd_cents?: number
+          allocation_source?: string
+          cashout_rate?: number | null
+          cashout_rate_source?: string
+          created_at?: string
+          created_by?: string | null
+          employee_id?: string
+          employer_id?: string
+          id?: string
+          invoice_id?: string | null
+          invoice_month?: string | null
+          invoice_payment_id?: string | null
+          override_reason?: string | null
+          paid_month?: string | null
+          payroll_month?: string | null
+          salary_payment_id?: string | null
+          source_key?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_payroll_allocations_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "portal_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_payroll_allocations_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_payroll_allocations_employer_id_fkey"
+            columns: ["employer_id"]
+            isOneToOne: false
+            referencedRelation: "employers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_payroll_allocations_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "finance_invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_payroll_allocations_invoice_payment_id_fkey"
+            columns: ["invoice_payment_id"]
+            isOneToOne: false
+            referencedRelation: "finance_invoice_payments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_payroll_allocations_salary_payment_id_fkey"
+            columns: ["salary_payment_id"]
+            isOneToOne: false
+            referencedRelation: "finance_employee_salary_payments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_payroll_allocations_source_key_fkey"
+            columns: ["source_key"]
+            isOneToOne: false
+            referencedRelation: "finance_sync_sources"
+            referencedColumns: ["source_key"]
+          },
+          {
+            foreignKeyName: "finance_payroll_allocations_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "portal_users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      finance_sync_runs: {
+        Row: {
+          created_at: string
+          external_invoice_id: string | null
+          id: string
+          result: Json
+          source_key: string
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          external_invoice_id?: string | null
+          id?: string
+          result?: Json
+          source_key?: string
+          status: string
+        }
+        Update: {
+          created_at?: string
+          external_invoice_id?: string | null
+          id?: string
+          result?: Json
+          source_key?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_sync_runs_source_key_fkey"
+            columns: ["source_key"]
+            isOneToOne: false
+            referencedRelation: "finance_sync_sources"
+            referencedColumns: ["source_key"]
+          },
+        ]
+      }
+      finance_sync_sources: {
+        Row: {
+          created_at: string
+          display_name: string
+          id: string
+          source_key: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          display_name: string
+          id?: string
+          source_key: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          display_name?: string
+          id?: string
+          source_key?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       holiday_calendar_change_requests: {
         Row: {
@@ -2027,6 +2834,142 @@ export type Database = {
           },
         ]
       }
+      message_entries: {
+        Row: {
+          body: string
+          created_at: string
+          id: string
+          sender_id: string | null
+          thread_id: string
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          id?: string
+          sender_id?: string | null
+          thread_id: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          id?: string
+          sender_id?: string | null
+          thread_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "message_entries_sender_id_fkey"
+            columns: ["sender_id"]
+            isOneToOne: false
+            referencedRelation: "portal_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_entries_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "message_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      message_participants: {
+        Row: {
+          archived_at: string | null
+          created_at: string
+          id: string
+          last_read_at: string | null
+          portal_user_id: string
+          role_snapshot: string
+          thread_id: string
+        }
+        Insert: {
+          archived_at?: string | null
+          created_at?: string
+          id?: string
+          last_read_at?: string | null
+          portal_user_id: string
+          role_snapshot: string
+          thread_id: string
+        }
+        Update: {
+          archived_at?: string | null
+          created_at?: string
+          id?: string
+          last_read_at?: string | null
+          portal_user_id?: string
+          role_snapshot?: string
+          thread_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "message_participants_portal_user_id_fkey"
+            columns: ["portal_user_id"]
+            isOneToOne: false
+            referencedRelation: "portal_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_participants_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "message_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      message_threads: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          employer_id: string | null
+          id: string
+          related_employee_id: string | null
+          subject: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          employer_id?: string | null
+          id?: string
+          related_employee_id?: string | null
+          subject: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          employer_id?: string | null
+          id?: string
+          related_employee_id?: string | null
+          subject?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "message_threads_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "portal_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_threads_employer_id_fkey"
+            columns: ["employer_id"]
+            isOneToOne: false
+            referencedRelation: "employers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_threads_related_employee_id_fkey"
+            columns: ["related_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notice_recipients: {
         Row: {
           acknowledged_at: string | null
@@ -2245,6 +3188,353 @@ export type Database = {
           },
         ]
       }
+      portal_employee_payroll_line_items: {
+        Row: {
+          amount: number | null
+          created_at: string
+          created_by: string | null
+          id: string
+          label: string
+          note: string | null
+          payroll_record_id: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          amount?: number | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          label: string
+          note?: string | null
+          payroll_record_id: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          amount?: number | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          label?: string
+          note?: string | null
+          payroll_record_id?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portal_employee_payroll_line_items_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "portal_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "portal_employee_payroll_line_items_payroll_record_id_fkey"
+            columns: ["payroll_record_id"]
+            isOneToOne: false
+            referencedRelation: "portal_employee_payroll_records"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "portal_employee_payroll_line_items_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "portal_users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      portal_employee_payroll_records: {
+        Row: {
+          actual_paid_inr: number
+          created_at: string
+          created_by: string | null
+          employee_id: string
+          employer_id: string
+          gross_salary_inr: number
+          id: string
+          payment_date: string | null
+          payment_status: string
+          payroll_month: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          actual_paid_inr?: number
+          created_at?: string
+          created_by?: string | null
+          employee_id: string
+          employer_id: string
+          gross_salary_inr?: number
+          id?: string
+          payment_date?: string | null
+          payment_status?: string
+          payroll_month: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          actual_paid_inr?: number
+          created_at?: string
+          created_by?: string | null
+          employee_id?: string
+          employer_id?: string
+          gross_salary_inr?: number
+          id?: string
+          payment_date?: string | null
+          payment_status?: string
+          payroll_month?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portal_employee_payroll_records_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "portal_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "portal_employee_payroll_records_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "portal_employee_payroll_records_employer_id_fkey"
+            columns: ["employer_id"]
+            isOneToOne: false
+            referencedRelation: "employers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "portal_employee_payroll_records_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "portal_users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      portal_employer_invoice_line_items: {
+        Row: {
+          amount: number | null
+          created_at: string
+          created_by: string | null
+          id: string
+          invoice_record_id: string
+          label: string
+          note: string | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          amount?: number | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          invoice_record_id: string
+          label: string
+          note?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          amount?: number | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          invoice_record_id?: string
+          label?: string
+          note?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portal_employer_invoice_line_items_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "portal_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "portal_employer_invoice_line_items_invoice_record_id_fkey"
+            columns: ["invoice_record_id"]
+            isOneToOne: false
+            referencedRelation: "portal_employer_invoice_records"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "portal_employer_invoice_line_items_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "portal_users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      portal_employer_invoice_records: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          currency: string
+          days_worked: number | null
+          employee_id: string
+          employer_id: string
+          hourly_rate: number
+          hours_per_week: number
+          id: string
+          invoice_month: string
+          invoice_no: string | null
+          monthly_bill: number
+          status: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          days_worked?: number | null
+          employee_id: string
+          employer_id: string
+          hourly_rate?: number
+          hours_per_week?: number
+          id?: string
+          invoice_month: string
+          invoice_no?: string | null
+          monthly_bill?: number
+          status?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          days_worked?: number | null
+          employee_id?: string
+          employer_id?: string
+          hourly_rate?: number
+          hours_per_week?: number
+          id?: string
+          invoice_month?: string
+          invoice_no?: string | null
+          monthly_bill?: number
+          status?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portal_employer_invoice_records_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "portal_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "portal_employer_invoice_records_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "portal_employer_invoice_records_employer_id_fkey"
+            columns: ["employer_id"]
+            isOneToOne: false
+            referencedRelation: "employers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "portal_employer_invoice_records_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "portal_users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      portal_payslip_files: {
+        Row: {
+          created_at: string
+          employee_id: string
+          employer_id: string
+          file_name: string
+          file_path: string
+          file_size_bytes: number | null
+          id: string
+          mime_type: string | null
+          payroll_month: string
+          payroll_record_id: string
+          uploaded_at: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          employee_id: string
+          employer_id: string
+          file_name: string
+          file_path: string
+          file_size_bytes?: number | null
+          id?: string
+          mime_type?: string | null
+          payroll_month: string
+          payroll_record_id: string
+          uploaded_at?: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          employee_id?: string
+          employer_id?: string
+          file_name?: string
+          file_path?: string
+          file_size_bytes?: number | null
+          id?: string
+          mime_type?: string | null
+          payroll_month?: string
+          payroll_record_id?: string
+          uploaded_at?: string
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portal_payslip_files_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "portal_payslip_files_employer_id_fkey"
+            columns: ["employer_id"]
+            isOneToOne: false
+            referencedRelation: "employers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "portal_payslip_files_payroll_record_id_fkey"
+            columns: ["payroll_record_id"]
+            isOneToOne: true
+            referencedRelation: "portal_employee_payroll_records"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "portal_payslip_files_uploaded_by_fkey"
+            columns: ["uploaded_by"]
+            isOneToOne: false
+            referencedRelation: "portal_users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       portal_users: {
         Row: {
           clerk_user_id: string
@@ -2254,8 +3544,10 @@ export type Database = {
           full_name: string | null
           id: string
           last_seen_at: string | null
+          notification_preferences: Json | null
           role: Database["public"]["Enums"]["portal_role"]
           status: Database["public"]["Enums"]["account_status"]
+          theme_preference: string | null
           updated_at: string
         }
         Insert: {
@@ -2266,8 +3558,10 @@ export type Database = {
           full_name?: string | null
           id?: string
           last_seen_at?: string | null
+          notification_preferences?: Json | null
           role: Database["public"]["Enums"]["portal_role"]
           status?: Database["public"]["Enums"]["account_status"]
+          theme_preference?: string | null
           updated_at?: string
         }
         Update: {
@@ -2278,8 +3572,10 @@ export type Database = {
           full_name?: string | null
           id?: string
           last_seen_at?: string | null
+          notification_preferences?: Json | null
           role?: Database["public"]["Enums"]["portal_role"]
           status?: Database["public"]["Enums"]["account_status"]
+          theme_preference?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -2288,6 +3584,63 @@ export type Database = {
             columns: ["employer_id"]
             isOneToOne: false
             referencedRelation: "employers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profile_change_requests: {
+        Row: {
+          admin_notes: string | null
+          created_at: string
+          id: string
+          payload: Json
+          requested_by: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+          target_id: string
+          target_type: string
+          updated_at: string
+        }
+        Insert: {
+          admin_notes?: string | null
+          created_at?: string
+          id?: string
+          payload?: Json
+          requested_by?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          target_id: string
+          target_type: string
+          updated_at?: string
+        }
+        Update: {
+          admin_notes?: string | null
+          created_at?: string
+          id?: string
+          payload?: Json
+          requested_by?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          target_id?: string
+          target_type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profile_change_requests_requested_by_fkey"
+            columns: ["requested_by"]
+            isOneToOne: false
+            referencedRelation: "portal_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profile_change_requests_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "portal_users"
             referencedColumns: ["id"]
           },
         ]
@@ -2373,6 +3726,89 @@ export type Database = {
             columns: ["employer_id"]
             isOneToOne: false
             referencedRelation: "employers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      service_agreements: {
+        Row: {
+          admin_notes: string | null
+          created_at: string
+          currency: string | null
+          employee_id: string | null
+          employer_id: string
+          employer_notes: string | null
+          file_path: string
+          id: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          shared_with_employee: boolean
+          status: string
+          title: string
+          updated_at: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          admin_notes?: string | null
+          created_at?: string
+          currency?: string | null
+          employee_id?: string | null
+          employer_id: string
+          employer_notes?: string | null
+          file_path: string
+          id?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          shared_with_employee?: boolean
+          status?: string
+          title: string
+          updated_at?: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          admin_notes?: string | null
+          created_at?: string
+          currency?: string | null
+          employee_id?: string | null
+          employer_id?: string
+          employer_notes?: string | null
+          file_path?: string
+          id?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          shared_with_employee?: boolean
+          status?: string
+          title?: string
+          updated_at?: string
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "service_agreements_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_agreements_employer_id_fkey"
+            columns: ["employer_id"]
+            isOneToOne: false
+            referencedRelation: "employers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_agreements_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "portal_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "service_agreements_uploaded_by_fkey"
+            columns: ["uploaded_by"]
+            isOneToOne: false
+            referencedRelation: "portal_users"
             referencedColumns: ["id"]
           },
         ]
@@ -2527,7 +3963,15 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      bulk_update_employee_team_assignments: {
+        Args: {
+          p_assignments: Json
+          p_employer_id: string
+        }
+        Returns: {
+          updated_count: number
+        }[]
+      }
     }
     Enums: {
       account_status: "pending" | "active" | "suspended" | "deactivated"

@@ -454,6 +454,88 @@ function createTeamManagementSupabaseMock() {
   };
 }
 
+function createBulkTeamAssignmentsSupabaseMock({
+  employeeEmployerId = "employer_1",
+  teamEmployerId = "employer_1",
+  employerExists = true,
+  rpcError = null as Error | null,
+} = {}) {
+  const deletes: Array<{ table: string; filters: Array<{ column: string; value: unknown; op?: string }> }> = [];
+  const upserts: Array<{ table: string; payload: unknown }> = [];
+  const updates: Array<{ table: string; payload: Record<string, unknown>; filters: Array<{ column: string; value: unknown; op?: string }> }> = [];
+  const rpcCalls: Array<{ fn: string; args: Record<string, unknown> }> = [];
+
+  const table = (name: string) => {
+    const filters: Array<{ column: string; value: unknown; op?: string }> = [];
+    let isDelete = false;
+    let updatePayload: Record<string, unknown> | null = null;
+    const query = {
+      select: vi.fn(() => query),
+      eq: vi.fn((column: string, value: unknown) => {
+        filters.push({ column, value });
+        return query;
+      }),
+      neq: vi.fn((column: string, value: unknown) => {
+        filters.push({ column, value, op: "neq" });
+        return query;
+      }),
+      delete: vi.fn(() => {
+        isDelete = true;
+        return query;
+      }),
+      upsert: vi.fn((payload: unknown) => {
+        upserts.push({ table: name, payload });
+        return Promise.resolve({ error: null });
+      }),
+      update: vi.fn((payload: Record<string, unknown>) => {
+        updatePayload = payload;
+        return query;
+      }),
+      single: vi.fn(async () => {
+        if (name === "employers") {
+          return { data: employerExists ? { id: "employer_1" } : null, error: null };
+        }
+        if (name === "employees") {
+          const requestedEmployerId = filters.find((filter) => filter.column === "employer_id")?.value;
+          return {
+            data: requestedEmployerId === employeeEmployerId ? { id: "employee_1", employer_id: employeeEmployerId } : null,
+            error: null,
+          };
+        }
+        if (name === "teams") {
+          const requestedEmployerId = filters.find((filter) => filter.column === "employer_id")?.value;
+          return {
+            data: requestedEmployerId === teamEmployerId ? { id: "team_1", employer_id: teamEmployerId } : null,
+            error: null,
+          };
+        }
+        return { data: { id: "row_1", employer_id: "employer_1" }, error: null };
+      }),
+      then: vi.fn((resolve) => {
+        if (isDelete) deletes.push({ table: name, filters: [...filters] });
+        if (updatePayload) updates.push({ table: name, payload: updatePayload, filters: [...filters] });
+        return Promise.resolve({ error: null }).then(resolve);
+      }),
+    };
+
+    return query;
+  };
+
+  return {
+    deletes,
+    rpcCalls,
+    updates,
+    upserts,
+    client: {
+      from: vi.fn(table),
+      rpc: vi.fn(async (fn: string, args: Record<string, unknown>) => {
+        rpcCalls.push({ fn, args });
+        return rpcError ? { data: null, error: rpcError } : { data: { updated_count: 1 }, error: null };
+      }),
+    },
+  };
+}
+
 function createResignationFlowSupabaseMock(initialResignationStatus = "forwarded_to_employer") {
   const updates: Array<{ table: string; payload: Record<string, unknown>; filters: Array<{ column: string; value: unknown }> }> = [];
   const inserts: Array<{ table: string; payload: unknown }> = [];
@@ -923,6 +1005,192 @@ describe("onboarding core actions", () => {
 });
 
 describe("team management hardening", () => {
+  test("bulk assignment action is not exposed to employee users", async () => {
+    requirePortalRole.mockRejectedValue(new Error("Forbidden"));
+    const { bulkUpdateEmployeeTeamAssignmentsAction } = await import("@/lib/portal/actions/team-management");
+
+    await expect(
+      bulkUpdateEmployeeTeamAssignmentsAction(
+        form({
+          employer_id: "employer_1",
+          assignments: JSON.stringify([{ employee_id: "employee_1", team_id: "team_1" }]),
+        }),
+      ),
+    ).rejects.toThrow("Forbidden");
+
+    expect(requirePortalRole).toHaveBeenCalledWith(["super_admin", "admin", "employer_admin"]);
+  });
+
+  test("bulk assignment blocks employer users from assigning another employer employee", async () => {
+    const activeSession = {
+      ...session,
+      user: {
+        ...session.user,
+        role: "employer_admin",
+        status: "active",
+        employer_id: "employer_1",
+      },
+    };
+    requirePortalRole.mockResolvedValue(activeSession);
+    const supabase = createBulkTeamAssignmentsSupabaseMock({ employeeEmployerId: "employer_2" });
+    getSupabaseAdmin.mockReturnValue(supabase.client);
+    const { bulkUpdateEmployeeTeamAssignmentsAction } = await import("@/lib/portal/actions/team-management");
+
+    await expect(
+      bulkUpdateEmployeeTeamAssignmentsAction(
+        form({
+          employer_id: "employer_1",
+          assignments: JSON.stringify([{ employee_id: "employee_1", team_id: "team_1" }]),
+        }),
+      ),
+    ).rejects.toThrow("Employee is outside your employer scope.");
+  });
+
+  test("bulk assignment blocks employer users from assigning to another employer team", async () => {
+    const activeSession = {
+      ...session,
+      user: {
+        ...session.user,
+        role: "employer_admin",
+        status: "active",
+        employer_id: "employer_1",
+      },
+    };
+    requirePortalRole.mockResolvedValue(activeSession);
+    const supabase = createBulkTeamAssignmentsSupabaseMock({ teamEmployerId: "employer_2" });
+    getSupabaseAdmin.mockReturnValue(supabase.client);
+    const { bulkUpdateEmployeeTeamAssignmentsAction } = await import("@/lib/portal/actions/team-management");
+
+    await expect(
+      bulkUpdateEmployeeTeamAssignmentsAction(
+        form({
+          employer_id: "employer_1",
+          assignments: JSON.stringify([{ employee_id: "employee_1", team_id: "team_1" }]),
+        }),
+      ),
+    ).rejects.toThrow("Team is outside your employer scope.");
+  });
+
+  test("bulk assignment saves staged employee team changes through the atomic RPC", async () => {
+    const activeSession = {
+      ...session,
+      user: {
+        ...session.user,
+        role: "employer_admin",
+        status: "active",
+        employer_id: "employer_1",
+      },
+    };
+    requirePortalRole.mockResolvedValue(activeSession);
+    const supabase = createBulkTeamAssignmentsSupabaseMock();
+    getSupabaseAdmin.mockReturnValue(supabase.client);
+    const { bulkUpdateEmployeeTeamAssignmentsAction } = await import("@/lib/portal/actions/team-management");
+
+    await bulkUpdateEmployeeTeamAssignmentsAction(
+      form({
+        employer_id: "employer_1",
+        assignments: JSON.stringify([{ employee_id: "employee_1", team_id: "team_1" }]),
+      }),
+    );
+
+    expect(supabase.rpcCalls).toContainEqual({
+      fn: "bulk_update_employee_team_assignments",
+      args: {
+        p_employer_id: "employer_1",
+        p_assignments: [{ employee_id: "employee_1", team_id: "team_1" }],
+      },
+    });
+    expect(supabase.deletes).toEqual([]);
+    expect(supabase.upserts).toEqual([]);
+    expect(supabase.updates).toEqual([]);
+  });
+
+  test("bulk assignment rejects duplicate employee assignments before calling the RPC", async () => {
+    const activeSession = {
+      ...session,
+      user: {
+        ...session.user,
+        role: "employer_admin",
+        status: "active",
+        employer_id: "employer_1",
+      },
+    };
+    requirePortalRole.mockResolvedValue(activeSession);
+    const supabase = createBulkTeamAssignmentsSupabaseMock();
+    getSupabaseAdmin.mockReturnValue(supabase.client);
+    const { bulkUpdateEmployeeTeamAssignmentsAction } = await import("@/lib/portal/actions/team-management");
+
+    await expect(
+      bulkUpdateEmployeeTeamAssignmentsAction(
+        form({
+          employer_id: "employer_1",
+          assignments: JSON.stringify([
+            { employee_id: "employee_1", team_id: "team_1" },
+            { employee_id: "employee_1", team_id: null },
+          ]),
+        }),
+      ),
+    ).rejects.toThrow("Each employee can only appear once");
+
+    expect(supabase.rpcCalls).toEqual([]);
+  });
+
+  test("bulk assignment accepts null team ids for atomic unassignment", async () => {
+    const activeSession = {
+      ...session,
+      user: {
+        ...session.user,
+        role: "employer_admin",
+        status: "active",
+        employer_id: "employer_1",
+      },
+    };
+    requirePortalRole.mockResolvedValue(activeSession);
+    const supabase = createBulkTeamAssignmentsSupabaseMock();
+    getSupabaseAdmin.mockReturnValue(supabase.client);
+    const { bulkUpdateEmployeeTeamAssignmentsAction } = await import("@/lib/portal/actions/team-management");
+
+    await bulkUpdateEmployeeTeamAssignmentsAction(
+      form({
+        employer_id: "employer_1",
+        assignments: JSON.stringify([{ employee_id: "employee_1", team_id: null }]),
+      }),
+    );
+
+    expect(supabase.rpcCalls).toContainEqual({
+      fn: "bulk_update_employee_team_assignments",
+      args: {
+        p_employer_id: "employer_1",
+        p_assignments: [{ employee_id: "employee_1", team_id: null }],
+      },
+    });
+  });
+
+  test("bulk assignment reports RPC failures clearly", async () => {
+    const activeSession = {
+      ...session,
+      user: {
+        ...session.user,
+        role: "employer_admin",
+        status: "active",
+        employer_id: "employer_1",
+      },
+    };
+    requirePortalRole.mockResolvedValue(activeSession);
+    const supabase = createBulkTeamAssignmentsSupabaseMock({ rpcError: new Error("atomic save failed") });
+    getSupabaseAdmin.mockReturnValue(supabase.client);
+    const { bulkUpdateEmployeeTeamAssignmentsAction } = await import("@/lib/portal/actions/team-management");
+
+    await expect(
+      bulkUpdateEmployeeTeamAssignmentsAction(
+        form({
+          employer_id: "employer_1",
+          assignments: JSON.stringify([{ employee_id: "employee_1", team_id: "team_1" }]),
+        }),
+      ),
+    ).rejects.toThrow("atomic save failed");
+  });
+
   test("moving an employee to a team clears their previous team memberships first", async () => {
     const activeSession = {
       ...session,

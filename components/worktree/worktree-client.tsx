@@ -9,6 +9,9 @@ import type {
   WorktreeTeamNode,
 } from "@/lib/portal/worktree";
 import type { PortalRole } from "@/lib/portal/types";
+import { WorktreeTeamsManager } from "@/components/worktree/worktree-teams-manager";
+
+type WorktreeTab = "worktree" | "teams";
 
 type SelectedNode =
   | { type: "employer"; employer: WorktreeModel["employer"]; id: string; title: string; subtitle: string; meta: string }
@@ -248,7 +251,52 @@ function TeamBranch({
   );
 }
 
-function WorktreePagination({ data }: { data: WorktreePageData }) {
+function worktreeHref({
+  employerIndex,
+  tab,
+}: {
+  employerIndex?: number;
+  tab?: WorktreeTab;
+}) {
+  const params = new URLSearchParams();
+  if (typeof employerIndex === "number") params.set("employer", String(employerIndex));
+  if (tab && tab !== "worktree") params.set("tab", tab);
+  const query = params.toString();
+  return query ? `/dashboard/worktree?${query}` : "/dashboard/worktree";
+}
+
+function WorktreeTabs({
+  activeTab,
+  data,
+}: {
+  activeTab: WorktreeTab;
+  data: WorktreePageData;
+}) {
+  const employerIndex = data.mode === "admin" ? data.employerIndex : undefined;
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
+      {([
+        ["worktree", "Worktree"],
+        ["teams", "Teams"],
+      ] as Array<[WorktreeTab, string]>).map(([tab, label]) => (
+        <Link
+          key={tab}
+          href={worktreeHref({ employerIndex, tab })}
+          className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
+            activeTab === tab
+              ? "bg-blue-700 text-white"
+              : "text-slate-600 hover:bg-slate-50 hover:text-slate-950"
+          }`}
+          aria-current={activeTab === tab ? "page" : undefined}
+        >
+          {label}
+        </Link>
+      ))}
+    </div>
+  );
+}
+
+function WorktreePagination({ data, activeTab }: { data: WorktreePageData; activeTab: WorktreeTab }) {
   if (data.mode !== "admin" || data.employerCount <= 0) return null;
 
   const previous = Math.max(0, data.employerIndex - 1);
@@ -270,7 +318,7 @@ function WorktreePagination({ data }: { data: WorktreePageData }) {
       </div>
       <div className="flex items-center gap-2">
         <Link
-          href={`/dashboard/worktree?employer=${previous}`}
+          href={worktreeHref({ employerIndex: previous, tab: activeTab })}
           className={`rounded-xl border px-4 py-2 text-sm font-semibold transition ${
             data.employerIndex === 0
               ? "pointer-events-none border-slate-200 text-slate-300"
@@ -280,7 +328,7 @@ function WorktreePagination({ data }: { data: WorktreePageData }) {
           Previous Employer
         </Link>
         <Link
-          href={`/dashboard/worktree?employer=${next}`}
+          href={worktreeHref({ employerIndex: next, tab: activeTab })}
           className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
             data.employerIndex >= data.employerCount - 1
               ? "pointer-events-none bg-slate-100 text-slate-400"
@@ -642,9 +690,11 @@ function EmployeeSelfView({ employee, role }: { employee: WorktreeEmployeeNode; 
 export function WorktreeClient({
   data,
   role,
+  activeTab = "worktree",
 }: {
   data: WorktreePageData;
   role: PortalRole;
+  activeTab?: WorktreeTab;
 }) {
   if (data.error) {
     return (
@@ -668,8 +718,17 @@ export function WorktreeClient({
 
   return (
     <div className="grid gap-5">
-      <WorktreePagination data={data} />
-      <WorktreeCanvas model={data.model} role={role} mode={data.mode} />
+      <WorktreeTabs activeTab={activeTab} data={data} />
+      <WorktreePagination data={data} activeTab={activeTab} />
+      {activeTab === "teams" ? (
+        <WorktreeTeamsManager
+          key={`${data.model.employer.id}:${data.model.assignableEmployees.map((employee) => `${employee.id}:${employee.team_id ?? ""}`).join("|")}`}
+          model={data.model}
+          role={role}
+        />
+      ) : (
+        <WorktreeCanvas model={data.model} role={role} mode={data.mode} />
+      )}
     </div>
   );
 }

@@ -17,7 +17,7 @@ export default async function ReportsPage() {
           <ReportCard title="Pending documents" value={data.pendingDocuments} href="/dashboard/onboarding" />
           <ReportCard title="Calendar requests" value={data.pendingCalendarRequests} href={session.user.role === "employer_admin" ? "/dashboard/employer/leaves/calendar" : "/dashboard/admin/leaves/calendar-requests"} />
           <ReportCard title="Marked absences" value={data.absences} href="/dashboard/attendance" />
-          {session.user.role !== "employer_admin" ? <ReportCard title="Finance mapping" value={data.financeNeedsMapping} href="/dashboard/finances/mapping" /> : null}
+          {session.user.role !== "employer_admin" ? <ReportCard title="Finance mapping" value={data.financeNeedsMapping} href="/dashboard/imports/finance-reconciliation/mapping" /> : null}
         </div>
         <Panel title="Exports" description="Download scoped CSV reports for payroll review, leave audits, and lifecycle tracking.">
           <div className="flex flex-wrap gap-3">

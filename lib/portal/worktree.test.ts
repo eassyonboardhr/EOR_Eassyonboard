@@ -130,5 +130,10 @@ describe("buildWorktreeModel", () => {
     expect(model.teams[1].employees.map((employee) => employee.id)).toEqual([
       "employee_department",
     ]);
+    expect(model.assignableEmployees.map((employee) => employee.id)).toEqual([
+      "employee_manager",
+      "employee_member",
+      "employee_department",
+    ]);
   });
 });

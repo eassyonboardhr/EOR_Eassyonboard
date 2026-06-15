@@ -63,7 +63,8 @@ export async function mapFinanceCompanyAction(formData: FormData) {
   ]);
 
   revalidatePath("/dashboard/finances");
-  revalidatePath("/dashboard/finances/mapping");
+  revalidatePath("/dashboard/imports/finance-reconciliation");
+  revalidatePath("/dashboard/imports/finance-reconciliation/mapping");
 }
 
 export async function mapFinanceEmployeeAction(formData: FormData) {
@@ -102,7 +103,8 @@ export async function mapFinanceEmployeeAction(formData: FormData) {
   ]);
 
   revalidatePath("/dashboard/finances");
-  revalidatePath("/dashboard/finances/mapping");
+  revalidatePath("/dashboard/imports/finance-reconciliation");
+  revalidatePath("/dashboard/imports/finance-reconciliation/mapping");
 }
 
 export async function markFinanceInvoicePaymentReceivedAction(formData: FormData) {
@@ -188,7 +190,8 @@ export async function markFinanceInvoicePaymentReceivedAction(formData: FormData
   });
 
   revalidatePath("/dashboard/finances");
-  revalidatePath("/dashboard/finances/mapping");
+  revalidatePath("/dashboard/imports/finance-reconciliation");
+  revalidatePath("/dashboard/imports/finance-reconciliation/mapping");
 }
 
 export async function inferFinancePayrollAllocationsAction(formData: FormData) {
@@ -267,6 +270,7 @@ export async function inferFinancePayrollAllocationsAction(formData: FormData) {
   });
 
   revalidatePath("/dashboard/finances");
+  revalidatePath("/dashboard/imports/finance-reconciliation");
   revalidatePath("/dashboard/worktree");
 }
 
@@ -341,5 +345,6 @@ export async function updateFinancePayrollAllocationAction(formData: FormData) {
   });
 
   revalidatePath("/dashboard/finances");
+  revalidatePath("/dashboard/imports/finance-reconciliation");
   revalidatePath("/dashboard/worktree");
 }
